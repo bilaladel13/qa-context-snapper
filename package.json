@@ -1,0 +1,36 @@
+{
+  "name": "qa-context-snapper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that captures environment data, UI interactions and console errors, then generates a Markdown bug report and a Playwright test script.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:watch": "vite build --watch",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run build && node scripts/verify-build.mjs && node scripts/verify-bridge.mjs",
+    "verify:build": "node scripts/verify-build.mjs",
+    "verify:bridge": "node scripts/verify-bridge.mjs",
+    "preview:report": "node scripts/preview-report.mjs",
+    "zip": "npm run build && node scripts/zip.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.7.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/chrome": "^0.1.29",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0"
+  }
+}
