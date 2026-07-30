@@ -108,8 +108,9 @@ src/
   content/
     content-script.ts      Capture listeners, streams events to the background
     locator.ts             Element to structured target resolution
-    environment.ts         Browser, OS and viewport snapshot
     main-world-bridge.ts   Console patch injected into the page realm
+  settings/                Preference schema, validation and storage
+  shared/environment.ts    Browser detection usable from popup or page
   generator/
     generateMarkdownReport.ts
     generatePlaywrightScript.ts
@@ -210,6 +211,29 @@ while the bug is present and passes once it is fixed.
 `npm run preview:report` renders both outputs from a fixture and parses the generated script to
 confirm it is syntactically valid.
 
+### Settings and theming
+
+Preferences live in `chrome.storage.local` ([settings/](src/settings/)) and cover appearance,
+Playwright output and capture behaviour. Each control carries a `?` tooltip explaining the
+trade-off rather than restating its name.
+
+Theming uses CSS `light-dark()`: every token in [globals.css](src/styles/globals.css) carries both
+values, and switching a theme only changes `color-scheme`. That means the correct palette is painted
+on the first frame with no inline script, which matters because MV3's default CSP (`script-src
+'self'`) blocks inline scripts outright. It is also why `minimum_chrome_version` is 123.
+
+Free text is stored exactly as typed. Validation happens at generation time
+(`resolvePlaywrightSettings`), because normalising on write rewrites a half-finished value under the
+user mid-keystroke.
+
+### Regenerating without re-recording
+
+[locator.ts](src/content/locator.ts) records a candidate for every strategy an element supports, not
+just the winning one. The generator picks from those candidates at output time, so changing the
+selector preference, structure or quote style re-emits the script from the stored snapshot. The
+background watches `chrome.storage.onChanged` and regenerates automatically, so the result view
+updates while the settings are open.
+
 ### Known limitations
 
 - The console bridge is re-injected after a navigation in response to `CONTENT_HELLO`, so errors
@@ -237,8 +261,10 @@ The `@` alias maps to `src/`.
 - [x] Survive full page navigation during a recording
 - [x] Markdown bug report generation
 - [x] Playwright script generation
-- [x] Copy to clipboard
-- [ ] File export and screenshot attachment
+- [x] Copy to clipboard and file export
+- [x] Settings engine, light and dark themes, configurable Playwright output
+- [x] Keyboard shortcut and recording badge
+- [ ] Screenshot attachment
 - [ ] Follow recordings across newly opened tabs
 
 ## License
