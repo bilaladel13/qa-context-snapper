@@ -4,6 +4,8 @@ import type {
   ContentResponseMap,
   ContentToBackground,
   ContentToBackgroundResponseMap,
+  PopupQuery,
+  PopupQueryResponseMap,
   PopupRequest,
   PopupResponse,
   Result,
@@ -32,6 +34,12 @@ async function send<T>(dispatch: () => Promise<unknown>): Promise<Result<T>> {
 
 export function sendToBackground(request: PopupRequest): Promise<PopupResponse> {
   return send(() => chrome.runtime.sendMessage(request))
+}
+
+export function queryBackground<Q extends PopupQuery>(
+  query: Q,
+): Promise<Result<PopupQueryResponseMap[Q['type']]>> {
+  return send(() => chrome.runtime.sendMessage(query))
 }
 
 export function sendToTab<R extends ContentRequest>(

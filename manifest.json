@@ -3,7 +3,7 @@
   "name": "QA Context Snapper",
   "version": "0.1.0",
   "description": "Capture environment data, recent UI interactions and console errors, then generate a Markdown bug report and a Playwright test script.",
-  "minimum_chrome_version": "116",
+  "minimum_chrome_version": "123",
   "action": {
     "default_title": "QA Context Snapper",
     "default_popup": "src/popup/index.html",
@@ -33,5 +33,14 @@
     }
   ],
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
-  "host_permissions": ["<all_urls>"]
+  "host_permissions": ["<all_urls>"],
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Start or stop a QA Context Snapper recording"
+    }
+  }
 }

@@ -1,13 +1,22 @@
 import { sendToTab } from '@/messaging/client'
-import { fail, isContentToBackground, isPopupRequest, ok } from '@/messaging/protocol'
+import {
+  fail,
+  isContentToBackground,
+  isPopupQuery,
+  isPopupRequest,
+  ok,
+} from '@/messaging/protocol'
 import type {
+  ActiveTabInfo,
   ContentToBackground,
+  PopupQuery,
   PopupRequest,
   PopupResponse,
   Result,
 } from '@/messaging/protocol'
 import { generateReport } from '@/generator'
-import type { ContextSnapshot } from '@/types'
+import { loadSettings, onSettingsChanged } from '@/settings/store'
+import type { ContextSnapshot, EnvironmentSnapshot } from '@/types'
 import {
   appendConsoleError,
   appendInteraction,
@@ -18,9 +27,16 @@ import {
   setEnvironment,
   updateState,
 } from './store'
-import { ensureContentScript, getActiveTab, installConsoleCapture } from './tabs'
+import {
+  blockedReason,
+  ensureContentScript,
+  getActiveTab,
+  installConsoleCapture,
+  queryActiveTab,
+  readViewport,
+} from './tabs'
 
-const FALLBACK_ENVIRONMENT: ContextSnapshot['environment'] = {
+const FALLBACK_ENVIRONMENT: EnvironmentSnapshot = {
   browser: 'Unknown',
   browserVersion: 'unknown',
   os: 'Unknown',
@@ -32,6 +48,21 @@ const FALLBACK_ENVIRONMENT: ContextSnapshot['environment'] = {
   pageUrl: '',
   pageTitle: '',
   capturedAt: new Date(0).toISOString(),
+}
+
+async function setBadge(recording: boolean): Promise<void> {
+  try {
+    await chrome.action.setBadgeText({ text: recording ? 'REC' : '' })
+
+    if (recording) {
+      await chrome.action.setBadgeBackgroundColor({ color: '#dc2626' })
+      await chrome.action.setTitle({ title: 'QA Context Snapper: recording in progress' })
+    } else {
+      await chrome.action.setTitle({ title: 'QA Context Snapper' })
+    }
+  } catch {
+    // The action API is unavailable while the worker is shutting down.
+  }
 }
 
 async function startRecording(): Promise<PopupResponse> {
@@ -64,8 +95,11 @@ async function startRecording(): Promise<PopupResponse> {
 
   if (!started.ok) {
     await clearAll()
+    await setBadge(false)
     return started
   }
+
+  await setBadge(true)
 
   return ok(state)
 }
@@ -78,10 +112,7 @@ async function stopRecording(): Promise<PopupResponse> {
   }
 
   if (state.tabId !== null) {
-    await sendToTab(state.tabId, {
-      type: 'CONTENT_STOP_RECORDING',
-      sessionId: state.sessionId,
-    })
+    await sendToTab(state.tabId, { type: 'CONTENT_STOP_RECORDING', sessionId: state.sessionId })
   }
 
   const buffer = await getBuffer()
@@ -100,16 +131,71 @@ async function stopRecording(): Promise<PopupResponse> {
     stoppedAt,
   }
 
+  await setBadge(false)
+
   return ok(
     await updateState({
       status: 'result',
       stoppedAt,
       snapshot,
-      report: generateReport(snapshot),
+      report: generateReport(snapshot, await loadSettings()),
       interactionCount: snapshot.interactions.length,
       consoleErrorCount: snapshot.consoleErrors.length,
     }),
   )
+}
+
+async function resetRecording(): Promise<PopupResponse> {
+  const state = await getState()
+
+  if (state.status === 'recording' && state.tabId !== null && state.sessionId !== null) {
+    await sendToTab(state.tabId, { type: 'CONTENT_STOP_RECORDING', sessionId: state.sessionId })
+  }
+
+  await setBadge(false)
+
+  return ok(await clearAll())
+}
+
+async function describeActiveTab(): Promise<Result<ActiveTabInfo>> {
+  const tab = await queryActiveTab()
+
+  if (!tab) {
+    return fail('No active tab was found.')
+  }
+
+  const tabId = tab.id as number
+  const reason = blockedReason(tab.url)
+
+  return ok({
+    tabId,
+    pageUrl: tab.url ?? '',
+    pageTitle: tab.title ?? '',
+    viewportSize: (reason === null ? await readViewport(tabId) : null) ?? 'unavailable',
+    recordable: reason === null,
+    blockedReason: reason,
+  })
+}
+
+async function focusRecordedTab(): Promise<Result<{ focused: boolean }>> {
+  const state = await getState()
+
+  if (state.tabId === null) {
+    return ok({ focused: false })
+  }
+
+  try {
+    const tab = await chrome.tabs.get(state.tabId)
+    await chrome.tabs.update(state.tabId, { active: true })
+
+    if (tab.windowId !== undefined) {
+      await chrome.windows.update(tab.windowId, { focused: true })
+    }
+
+    return ok({ focused: true })
+  } catch {
+    return fail('The recorded tab is no longer open.')
+  }
 }
 
 async function handlePopupRequest(request: PopupRequest): Promise<PopupResponse> {
@@ -121,8 +207,12 @@ async function handlePopupRequest(request: PopupRequest): Promise<PopupResponse>
     case 'STOP_RECORDING':
       return stopRecording()
     case 'RESET_RECORDING':
-      return ok(await clearAll())
+      return resetRecording()
   }
+}
+
+function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
+  return query.type === 'GET_ACTIVE_TAB' ? describeActiveTab() : focusRecordedTab()
 }
 
 async function handleContentMessage(
@@ -172,34 +262,60 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'Background request failed.'
 }
 
+function respond(work: Promise<Result<unknown>>, sendResponse: (response: unknown) => void): true {
+  work.then(sendResponse).catch((error: unknown) => sendResponse(fail(describe(error))))
+  return true
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isContentToBackground(message)) {
-    handleContentMessage(message, sender)
-      .then(sendResponse)
-      .catch((error: unknown) => sendResponse(fail(describe(error))))
-
-    return true
+    return respond(handleContentMessage(message, sender), sendResponse)
   }
 
   if (isPopupRequest(message)) {
-    handlePopupRequest(message)
-      .then(sendResponse)
-      .catch((error: unknown) => sendResponse(fail(describe(error))))
+    return respond(handlePopupRequest(message), sendResponse)
+  }
 
-    return true
+  if (isPopupQuery(message)) {
+    return respond(handlePopupQuery(message), sendResponse)
   }
 
   return false
 })
 
 chrome.runtime.onInstalled.addListener(() => {
-  void clearAll()
+  void clearAll().then(() => setBadge(false))
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  void clearAll().then(() => setBadge(false))
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void getState().then((state) => {
+  void getState().then(async (state) => {
     if (state.tabId === tabId && state.status === 'recording') {
-      void clearAll()
+      await clearAll()
+      await setBadge(false)
+    }
+  })
+})
+
+chrome.commands?.onCommand.addListener((command) => {
+  if (command !== 'toggle-recording') {
+    return
+  }
+
+  void getState().then((state) =>
+    state.status === 'recording' ? stopRecording() : startRecording(),
+  )
+})
+
+// Regenerating from the stored snapshot means output options can be changed
+// after the fact without repeating the recording.
+onSettingsChanged((settings) => {
+  void getState().then((state) => {
+    if (state.status === 'result' && state.snapshot) {
+      void updateState({ report: generateReport(state.snapshot, settings) })
     }
   })
 })

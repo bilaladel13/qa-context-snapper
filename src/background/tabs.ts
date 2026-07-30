@@ -7,36 +7,71 @@ import { installConsoleBridge } from '@/content/main-world-bridge'
 const BLOCKED_PROTOCOLS = ['chrome:', 'chrome-untrusted:', 'devtools:', 'edge:', 'about:', 'view-source:']
 const BLOCKED_HOSTS = ['chrome.google.com', 'chromewebstore.google.com']
 
-export function isRecordableUrl(url: string | undefined): boolean {
+// Returns null when the page can be recorded, otherwise the reason to show.
+export function blockedReason(url: string | undefined): string | null {
   if (!url) {
-    return false
+    return 'This tab has no address yet.'
   }
+
+  let parsed: URL
 
   try {
-    const parsed = new URL(url)
-
-    if (parsed.protocol === 'chrome-extension:') {
-      return false
-    }
-
-    return !BLOCKED_PROTOCOLS.includes(parsed.protocol) && !BLOCKED_HOSTS.includes(parsed.hostname)
+    parsed = new URL(url)
   } catch {
-    return false
+    return 'This tab has an address the extension cannot read.'
   }
+
+  if (parsed.protocol === 'chrome-extension:') {
+    return 'Extension pages cannot be recorded.'
+  }
+
+  if (BLOCKED_HOSTS.includes(parsed.hostname)) {
+    return 'The Chrome Web Store blocks extensions from running.'
+  }
+
+  if (BLOCKED_PROTOCOLS.includes(parsed.protocol)) {
+    return 'Browser pages cannot be recorded. Open an http or https page.'
+  }
+
+  if (parsed.protocol === 'file:') {
+    return 'Local files need "Allow access to file URLs" enabled for this extension.'
+  }
+
+  return null
+}
+
+export function isRecordableUrl(url: string | undefined): boolean {
+  return blockedReason(url) === null
+}
+
+export async function queryActiveTab(): Promise<chrome.tabs.Tab | null> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  return tab?.id === undefined ? null : tab
 }
 
 export async function getActiveTab(): Promise<Result<chrome.tabs.Tab>> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await queryActiveTab()
 
-  if (!tab?.id) {
+  if (!tab) {
     return fail('No active tab was found.')
   }
 
-  if (!isRecordableUrl(tab.url)) {
-    return fail('This page cannot be recorded. Open a regular http or https page and try again.')
-  }
+  const reason = blockedReason(tab.url)
 
-  return ok(tab)
+  return reason ? fail(reason) : ok(tab)
+}
+
+export async function readViewport(tabId: number): Promise<string | null> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => `${window.innerWidth}x${window.innerHeight}`,
+    })
+
+    return typeof result?.result === 'string' ? result.result : null
+  } catch {
+    return null
+  }
 }
 
 const PING_ATTEMPTS = 5
