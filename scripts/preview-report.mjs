@@ -18,12 +18,24 @@ await build({
   resolve: { alias: { '@': resolve(ROOT, 'src') } },
 })
 
-const { generateReport } = await import(pathToFileURL(resolve(OUT, 'generator.js')).href)
+const { generateReport, generatePlaywrightScript } = await import(
+  pathToFileURL(resolve(OUT, 'generator.js')).href
+)
 
 const started = Date.parse('2026-07-30T10:00:00.000Z')
 const at = (offset) => started + offset
 
-const target = (over) => ({ strategy: 'css', value: '', tagName: 'div', cssSelector: 'div', ...over })
+const target = (over) => {
+  const merged = { strategy: 'css', value: '', tagName: 'div', cssSelector: 'div', ...over }
+  return {
+    ...merged,
+    candidates: {
+      css: merged.cssSelector,
+      [merged.strategy]: merged.value,
+      ...(merged.accessibleName ? { text: merged.accessibleName } : {}),
+    },
+  }
+}
 
 // Mirrors how locator.ts truncates: exactly 80 characters ending in an ellipsis.
 const truncatedName = `${'Place order and pay now for the entire basket including shipping and handling'.slice(0, 77)}...`
@@ -71,14 +83,63 @@ process.stdout.write(report.markdown)
 process.stdout.write('\n================ PLAYWRIGHT ================\n')
 process.stdout.write(report.playwrightScript)
 
-const runnable = report.playwrightScript
-  .replace(/^import .*$/gm, '')
-  .replace(/const consoleErrors: string\[\]/, 'const consoleErrors')
+const DEFAULTS = {
+  testTitle: 'Bug Reproduction',
+  structure: 'flat',
+  selectorPreference: 'auto',
+  quoteStyle: 'single',
+  includeComments: true,
+  includeHeader: true,
+  setViewport: true,
+  includeConsoleAssertion: true,
+  secretEnvVar: 'QA_SNAPPER_SECRET',
+}
 
-try {
-  new Function(`const test = () => {}; const expect = () => ({ toEqual() {} }); ${runnable}`)
-  process.stdout.write('\nSYNTAX CHECK: the generated script parses as valid JavaScript\n')
-} catch (error) {
-  process.stdout.write(`\nSYNTAX CHECK FAILED: ${error.message}\n`)
+const VARIANTS = [
+  ['defaults', {}],
+  ['test.step structure', { structure: 'steps' }],
+  ['css selectors forced', { selectorPreference: 'css' }],
+  ['role selectors forced', { selectorPreference: 'role' }],
+  ['double quotes', { quoteStyle: 'double' }],
+  ['minimal output', { includeComments: false, includeHeader: false, setViewport: false, includeConsoleAssertion: false }],
+]
+
+function parses(script) {
+  const runnable = script
+    .replace(/^import .*$/gm, '')
+    .replace(/const consoleErrors: string\[\]/, 'const consoleErrors')
+
+  try {
+    new Function(`const test = () => {}; test.step = () => {};
+      const expect = () => ({ toEqual() {} }); ${runnable}`)
+    return null
+  } catch (error) {
+    return error.message
+  }
+}
+
+process.stdout.write('\n================ VARIANTS ================\n')
+
+let failed = false
+
+for (const [name, overrides] of VARIANTS) {
+  const script = generatePlaywrightScript(snapshot, { ...DEFAULTS, ...overrides })
+  const error = parses(script)
+
+  process.stdout.write(`${error ? 'FAIL' : 'ok  '}  ${name.padEnd(22)} ${script.split('\n').length} lines\n`)
+
+  if (error) {
+    failed = true
+    process.stdout.write(`      ${error}\n`)
+  }
+}
+
+const stepsSample = generatePlaywrightScript(snapshot, { ...DEFAULTS, structure: 'steps' })
+process.stdout.write('\n--- test.step sample ---\n')
+process.stdout.write(stepsSample.split('\n').slice(0, 24).join('\n') + '\n')
+
+if (failed) {
   process.exitCode = 1
+} else {
+  process.stdout.write('\nSYNTAX CHECK: every variant parses as valid JavaScript\n')
 }

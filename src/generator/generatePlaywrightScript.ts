@@ -1,151 +1,195 @@
+import { DEFAULT_SETTINGS, resolvePlaywrightSettings } from '@/settings/schema'
+import type { PlaywrightSettings } from '@/settings/schema'
 import type { ContextSnapshot, ElementTarget, InteractionEvent } from '@/types'
-import { SECRET_ENV_VAR, parseViewport, quote, trimEllipsis } from './shared'
+import { parseViewport, quote, resolveStrategy, trimEllipsis } from './shared'
 
-function locator(target: ElementTarget): string {
-  switch (target.strategy) {
+function locator(target: ElementTarget, options: PlaywrightSettings): string {
+  const { strategy, value } = resolveStrategy(target, options.selectorPreference)
+  const q = (input: string) => quote(input, options.quoteStyle)
+
+  switch (strategy) {
     case 'testId':
-      return `page.getByTestId(${quote(target.value)})`
+      return `page.getByTestId(${q(value)})`
     case 'role': {
       const name = target.accessibleName ? trimEllipsis(target.accessibleName) : ''
       return name
-        ? `page.getByRole(${quote(target.value)}, { name: ${quote(name)} })`
-        : `page.getByRole(${quote(target.value)})`
+        ? `page.getByRole(${q(value)}, { name: ${q(name)} })`
+        : `page.getByRole(${q(value)})`
     }
     case 'label':
-      return `page.getByLabel(${quote(trimEllipsis(target.value))})`
+      return `page.getByLabel(${q(trimEllipsis(value))})`
     case 'placeholder':
-      return `page.getByPlaceholder(${quote(trimEllipsis(target.value))})`
+      return `page.getByPlaceholder(${q(trimEllipsis(value))})`
     case 'text':
-      return `page.getByText(${quote(trimEllipsis(target.value))})`
+      return `page.getByText(${q(trimEllipsis(value))})`
     case 'css':
-      return `page.locator(${quote(target.cssSelector)})`
+      return `page.locator(${q(value)})`
   }
 }
 
-function fillValue(step: InteractionEvent): string {
-  return step.masked
-    ? `process.env.${SECRET_ENV_VAR} ?? ''`
-    : quote(step.value ?? '')
-}
+function statement(step: InteractionEvent, options: PlaywrightSettings): string[] {
+  const q = (input: string) => quote(input, options.quoteStyle)
 
-function statement(step: InteractionEvent): string[] {
   if (step.type === 'navigation') {
-    return [`await page.goto(${quote(step.value ?? '')});`]
+    return [`await page.goto(${q(step.value ?? '')});`]
   }
 
   if (!step.target) {
-    if (step.type === 'keydown' && step.key) {
-      return [`await page.keyboard.press(${quote(step.key)});`]
-    }
-    return []
+    return step.type === 'keydown' && step.key
+      ? [`await page.keyboard.press(${q(step.key)});`]
+      : []
   }
 
-  const base = locator(step.target)
+  const base = locator(step.target, options)
+  const fillValue = step.masked ? `process.env.${options.secretEnvVar} ?? ''` : q(step.value ?? '')
 
   switch (step.type) {
     case 'click':
       return [`await ${base}.click();`]
     case 'input': {
-      const lines = step.masked ? [`// Value was redacted during capture.`] : []
-      lines.push(`await ${base}.fill(${fillValue(step)});`)
+      const lines = step.masked && options.includeComments ? ['// Value was redacted during capture.'] : []
+      lines.push(`await ${base}.fill(${fillValue});`)
       return lines
     }
     case 'change': {
       if (step.target.tagName === 'select') {
-        return [`await ${base}.selectOption({ label: ${quote(step.value ?? '')} });`]
+        return [`await ${base}.selectOption({ label: ${q(step.value ?? '')} });`]
       }
       if (step.target.tagName === 'input' && (step.value === 'true' || step.value === 'false')) {
         return [`await ${base}.${step.value === 'true' ? 'check' : 'uncheck'}();`]
       }
-      return [`await ${base}.fill(${fillValue(step)});`]
+      return [`await ${base}.fill(${fillValue});`]
     }
     case 'submit':
-      return [`// Form submitted: ${step.target.cssSelector}`]
+      return options.includeComments ? [`// Form submitted: ${step.target.cssSelector}`] : []
     case 'keydown':
-      return [`await ${base}.press(${quote(step.key ?? 'Enter')});`]
+      return [`await ${base}.press(${q(step.key ?? 'Enter')});`]
     default:
       return []
   }
 }
 
 function dedupeNavigation(steps: InteractionEvent[]): InteractionEvent[] {
-  return steps.filter((step, index) => {
+  let lastUrl: string | null = null
+
+  return steps.filter((step) => {
     if (step.type !== 'navigation') {
       return true
     }
 
-    const previous = steps
-      .slice(0, index)
-      .reverse()
-      .find((candidate) => candidate.type === 'navigation')
-
-    return previous?.value !== step.value
+    const isRepeat = step.value === lastUrl
+    lastUrl = step.value ?? null
+    return !isRepeat
   })
 }
 
-export function generatePlaywrightScript(snapshot: ContextSnapshot): string {
+// A step boundary is any navigation, so test.step groups map onto the pages the
+// tester actually moved through.
+function groupIntoSteps(steps: InteractionEvent[]): { title: string; steps: InteractionEvent[] }[] {
+  const groups: { title: string; steps: InteractionEvent[] }[] = []
+
+  for (const step of steps) {
+    if (step.type === 'navigation' || groups.length === 0) {
+      const title = step.type === 'navigation' ? `Go to ${shortUrl(step.value ?? '')}` : 'Initial page'
+      groups.push({ title, steps: [] })
+    }
+
+    groups[groups.length - 1]?.steps.push(step)
+  }
+
+  return groups.filter((group) => group.steps.length > 0)
+}
+
+function shortUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.pathname}${parsed.search}` || parsed.hostname
+  } catch {
+    return url
+  }
+}
+
+export function generatePlaywrightScript(
+  snapshot: ContextSnapshot,
+  requested: PlaywrightSettings = DEFAULT_SETTINGS.playwright,
+): string {
+  const options = resolvePlaywrightSettings(requested)
   const { environment, interactions, consoleErrors } = snapshot
   const steps = dedupeNavigation(interactions)
   const startUrl = steps.find((step) => step.type === 'navigation')?.value ?? environment.pageUrl
+  const q = (input: string) => quote(input, options.quoteStyle)
 
-  const body: string[] = []
-  const viewport = parseViewport(environment.viewportSize)
+  const lines: string[] = []
 
-  if (viewport) {
-    body.push(
-      `  await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });`,
-    )
-  }
-
-  body.push(`  await page.goto(${quote(startUrl)});`, '')
-
-  let emittedFirstNavigation = false
-
-  for (const step of steps) {
-    if (step.type === 'navigation' && !emittedFirstNavigation && step.value === startUrl) {
-      emittedFirstNavigation = true
-      continue
-    }
-
-    for (const line of statement(step)) {
-      body.push(`  ${line}`)
-    }
-  }
-
-  const hasSecret = interactions.some((step) => step.masked)
-  const header = [
-    `// Generated by QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}`,
-    `// ${environment.browser} ${environment.browserVersion} on ${environment.os}`,
-  ]
-
-  if (hasSecret) {
-    header.push(
-      `// A redacted value is read from process.env.${SECRET_ENV_VAR}. Set it before running.`,
-    )
-  }
-
-  const lines = [
-    ...header,
-    `import { test, expect } from '@playwright/test';`,
-    '',
-    `test('Bug Reproduction', async ({ page }) => {`,
-    `  const consoleErrors: string[] = [];`,
-    ``,
-    `  page.on('console', (message) => {`,
-    `    if (message.type() === 'error') consoleErrors.push(message.text());`,
-    `  });`,
-    `  page.on('pageerror', (error) => consoleErrors.push(error.message));`,
-    '',
-    ...body,
-  ]
-
-  if (consoleErrors.length > 0) {
+  if (options.includeHeader) {
     lines.push(
-      '',
-      `  // The recording captured ${consoleErrors.length} console error(s).`,
-      `  // This assertion fails while the bug is present and passes once it is fixed.`,
-      `  expect(consoleErrors, 'the page should log no console errors').toEqual([]);`,
+      `// Generated by QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}`,
+      `// ${environment.browser} ${environment.browserVersion} on ${environment.os}`,
     )
+
+    if (interactions.some((step) => step.masked)) {
+      lines.push(`// Set ${options.secretEnvVar} in the environment before running this test.`)
+    }
+  }
+
+  lines.push(`import { test, expect } from ${q('@playwright/test')};`, '')
+  lines.push(`test(${q(options.testTitle)}, async ({ page }) => {`)
+
+  if (options.includeConsoleAssertion) {
+    lines.push(
+      `  const consoleErrors: string[] = [];`,
+      '',
+      `  page.on(${q('console')}, (message) => {`,
+      `    if (message.type() === ${q('error')}) consoleErrors.push(message.text());`,
+      `  });`,
+      `  page.on(${q('pageerror')}, (error) => consoleErrors.push(error.message));`,
+      '',
+    )
+  }
+
+  const viewport = options.setViewport ? parseViewport(environment.viewportSize) : null
+  if (viewport) {
+    lines.push(`  await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });`)
+  }
+
+  lines.push(`  await page.goto(${q(startUrl)});`, '')
+
+  const body = steps.filter(
+    (step, index) => !(index === 0 && step.type === 'navigation' && step.value === startUrl),
+  )
+
+  if (options.structure === 'steps') {
+    for (const group of groupIntoSteps(body)) {
+      const inner = group.steps.flatMap((step) => statement(step, options))
+      if (inner.length === 0) continue
+
+      lines.push(`  await test.step(${q(group.title)}, async () => {`)
+      for (const line of inner) {
+        lines.push(`    ${line}`)
+      }
+      lines.push('  });', '')
+    }
+  } else {
+    for (const step of body) {
+      for (const line of statement(step, options)) {
+        lines.push(`  ${line}`)
+      }
+    }
+  }
+
+  if (options.includeConsoleAssertion && consoleErrors.length > 0) {
+    if (options.includeComments) {
+      lines.push(
+        '',
+        `  // The recording captured ${consoleErrors.length} console error(s).`,
+        `  // This assertion fails while the bug is present and passes once it is fixed.`,
+      )
+    }
+    lines.push(`  expect(consoleErrors, ${q('the page should log no console errors')}).toEqual([]);`)
+  }
+
+  while (lines[lines.length - 1] === '') {
+    lines.pop()
   }
 
   lines.push('});', '')

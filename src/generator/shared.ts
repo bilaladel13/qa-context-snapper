@@ -1,16 +1,19 @@
-import { MAX_TEXT_LENGTH } from '@/content/locator'
-import type { ElementTarget, InteractionEvent } from '@/types'
+import { MAX_TEXT_LENGTH } from '@/shared/constants'
+import type { QuoteStyle, SelectorPreference } from '@/settings/schema'
+import type { ElementTarget, InteractionEvent, LocatorStrategy } from '@/types'
 
-export const SECRET_ENV_VAR = 'QA_SNAPPER_SECRET'
+const AUTO_ORDER: LocatorStrategy[] = ['testId', 'role', 'label', 'placeholder', 'text', 'css']
 
-export function quote(value: string): string {
+export function quote(value: string, style: QuoteStyle = 'single'): string {
+  const delimiter = style === 'double' ? '"' : "'"
+
   const escaped = value
     .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
+    .replace(new RegExp(delimiter, 'g'), `\\${delimiter}`)
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '')
 
-  return `'${escaped}'`
+  return `${delimiter}${escaped}${delimiter}`
 }
 
 // Captures longer than the limit are stored with a trailing ellipsis that would
@@ -22,6 +25,30 @@ export function trimEllipsis(value: string): string {
 
 export function escapeTableCell(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+}
+
+export interface ResolvedLocator {
+  strategy: LocatorStrategy
+  value: string
+}
+
+// Candidates are recorded for every strategy, so the preferred one can be
+// applied when the script is generated rather than when the page was recorded.
+export function resolveStrategy(
+  target: ElementTarget,
+  preference: SelectorPreference,
+): ResolvedLocator {
+  const candidates = target.candidates ?? { [target.strategy]: target.value, css: target.cssSelector }
+  const order = preference === 'auto' ? AUTO_ORDER : [preference, ...AUTO_ORDER]
+
+  for (const strategy of order) {
+    const value = candidates[strategy]
+    if (value !== undefined && value !== '') {
+      return { strategy, value }
+    }
+  }
+
+  return { strategy: 'css', value: target.cssSelector }
 }
 
 export function describeTarget(target: ElementTarget | null): string {
@@ -66,10 +93,5 @@ export function describeStep(step: InteractionEvent): string {
 
 export function parseViewport(viewport: string): { width: number; height: number } | null {
   const match = viewport.match(/^(\d+)x(\d+)$/)
-
-  if (!match) {
-    return null
-  }
-
-  return { width: Number(match[1]), height: Number(match[2]) }
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null
 }
