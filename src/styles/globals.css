@@ -1,0 +1,23 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-surface: oklch(0.19 0.02 265);
+  --color-surface-raised: oklch(0.24 0.02 265);
+  --color-surface-border: oklch(0.32 0.02 265);
+  --color-accent: oklch(0.72 0.16 250);
+  --color-accent-strong: oklch(0.64 0.18 250);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 400px;
+  min-height: 320px;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--color-slate-100);
+  background-color: var(--color-surface);
+}
