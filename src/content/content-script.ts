@@ -1,15 +1,28 @@
 import { reportToBackground } from '@/messaging/client'
 import { ok } from '@/messaging/protocol'
 import type { ContentRequest, ContentResponse } from '@/messaging/protocol'
+import { DEFAULT_SETTINGS, parseTestIdAttributes } from '@/settings/schema'
+import type { CaptureSettings } from '@/settings/schema'
+import { loadSettings, onSettingsChanged } from '@/settings/store'
+import { MAX_VALUE_LENGTH } from '@/shared/constants'
+import { captureEnvironment } from '@/shared/environment'
 import type { ConsoleErrorEntry, InteractionEvent, InteractionType } from '@/types'
 import { CONSOLE_CHANNEL } from './bridge-protocol'
 import type { BridgeControl, BridgeMessage } from './bridge-protocol'
-import { captureEnvironment } from './environment'
-import { collapse, resolveTarget } from './locator'
+import { collapse, configureTestIdAttributes, resolveTarget } from './locator'
 
-const MAX_VALUE_LENGTH = 200
 const INPUT_FLUSH_MS = 400
 const MASK = '[redacted]'
+
+let capture: CaptureSettings = DEFAULT_SETTINGS.capture
+
+function applyCaptureSettings(next: CaptureSettings): void {
+  capture = next
+  configureTestIdAttributes(parseTestIdAttributes(next.testIdAttributes))
+}
+
+void loadSettings().then((settings) => applyCaptureSettings(settings.capture))
+onSettingsChanged((settings) => applyCaptureSettings(settings.capture))
 
 const INTERACTIVE_SELECTOR =
   'a, button, input, select, textarea, label, summary, option, [role], [tabindex], [onclick], [contenteditable]'
@@ -45,6 +58,10 @@ function elementFromEvent(event: Event): Element | null {
 }
 
 function isSensitive(input: HTMLInputElement): boolean {
+  if (!capture.maskSensitive) {
+    return false
+  }
+
   if (input.type === 'password') {
     return true
   }
@@ -220,7 +237,7 @@ function handleSubmit(event: SubmitEvent): void {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.repeat || !TRACKED_KEYS.has(event.key)) {
+  if (!capture.trackKeyboard || event.repeat || !TRACKED_KEYS.has(event.key)) {
     return
   }
 

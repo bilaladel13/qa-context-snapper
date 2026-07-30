@@ -1,16 +1,20 @@
-export interface EnvironmentSnapshot {
+export interface ClientEnvironment {
   browser: string
   browserVersion: string
   os: string
   screenSize: string
-  viewportSize: string
   devicePixelRatio: number
   language: string
   userAgent: string
+}
+
+export interface PageInfo {
   pageUrl: string
   pageTitle: string
-  capturedAt: string
+  viewportSize: string
 }
+
+export type EnvironmentSnapshot = ClientEnvironment & PageInfo & { capturedAt: string }
 
 export type ConsoleErrorLevel = 'error' | 'warn' | 'unhandledrejection'
 
@@ -32,6 +36,8 @@ export type InteractionType = 'click' | 'input' | 'change' | 'submit' | 'keydown
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'
 
+export type LocatorCandidates = Partial<Record<LocatorStrategy, string>>
+
 export interface ElementTarget {
   strategy: LocatorStrategy
   value: string
@@ -40,6 +46,7 @@ export interface ElementTarget {
   tagName: string
   cssSelector: string
   textSnippet?: string
+  candidates?: LocatorCandidates
 }
 
 export interface InteractionEvent {

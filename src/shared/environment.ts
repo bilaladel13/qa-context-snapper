@@ -1,4 +1,4 @@
-import type { EnvironmentSnapshot } from '@/types'
+import type { ClientEnvironment, EnvironmentSnapshot, PageInfo } from '@/types'
 
 interface HighEntropyValues {
   platform?: string
@@ -17,7 +17,15 @@ interface UserAgentData {
   getHighEntropyValues?: (hints: string[]) => Promise<HighEntropyValues>
 }
 
-const BRAND_PRIORITY = ['Microsoft Edge', 'Opera', 'Brave', 'Google Chrome', 'Chromium']
+const BRAND_PRIORITY = ['Microsoft Edge', 'Opera', 'Brave', 'Vivaldi', 'Google Chrome', 'Chromium']
+
+const UA_BROWSERS: [string, RegExp][] = [
+  ['Microsoft Edge', /Edg\/([\d.]+)/],
+  ['Opera', /OPR\/([\d.]+)/],
+  ['Firefox', /Firefox\/([\d.]+)/],
+  ['Google Chrome', /Chrome\/([\d.]+)/],
+  ['Safari', /Version\/([\d.]+).*Safari/],
+]
 
 function userAgentData(): UserAgentData | undefined {
   return (navigator as Navigator & { userAgentData?: UserAgentData }).userAgentData
@@ -37,17 +45,8 @@ function pickBrand(brands: UserAgentBrand[]): UserAgentBrand | undefined {
 }
 
 function browserFromUserAgent(): { browser: string; browserVersion: string } {
-  const ua = navigator.userAgent
-  const patterns: [string, RegExp][] = [
-    ['Microsoft Edge', /Edg\/([\d.]+)/],
-    ['Opera', /OPR\/([\d.]+)/],
-    ['Firefox', /Firefox\/([\d.]+)/],
-    ['Google Chrome', /Chrome\/([\d.]+)/],
-    ['Safari', /Version\/([\d.]+).*Safari/],
-  ]
-
-  for (const [browser, pattern] of patterns) {
-    const match = ua.match(pattern)
+  for (const [browser, pattern] of UA_BROWSERS) {
+    const match = navigator.userAgent.match(pattern)
     if (match) {
       return { browser, browserVersion: match[1] ?? 'unknown' }
     }
@@ -87,31 +86,24 @@ function formatOs(platform: string, platformVersion: string): string {
   return platformVersion ? `${platform} ${platformVersion}` : platform
 }
 
-export async function captureEnvironment(): Promise<EnvironmentSnapshot> {
+// Everything here describes the browser itself, so it is identical whether it
+// runs in the popup or in a page. The popup uses it to show environment data
+// immediately, without needing to reach into a tab.
+export async function detectClient(): Promise<ClientEnvironment> {
   const data = userAgentData()
-  let browser = 'Unknown'
-  let browserVersion = 'unknown'
-  let os = 'Unknown'
-
   const brand = data?.brands ? pickBrand(data.brands) : undefined
 
-  if (brand) {
-    browser = brand.brand
-    browserVersion = brand.version
-  }
+  let browser = brand?.brand ?? 'Unknown'
+  let browserVersion = brand?.version ?? 'unknown'
+  let os = 'Unknown'
 
   if (data?.getHighEntropyValues) {
     try {
-      const high = await data.getHighEntropyValues([
-        'platform',
-        'platformVersion',
-        'uaFullVersion',
-      ])
+      const high = await data.getHighEntropyValues(['platform', 'platformVersion', 'uaFullVersion'])
 
       if (high.uaFullVersion) {
         browserVersion = high.uaFullVersion
       }
-
       if (high.platform) {
         os = formatOs(high.platform, high.platformVersion ?? '')
       }
@@ -135,12 +127,24 @@ export async function captureEnvironment(): Promise<EnvironmentSnapshot> {
     browserVersion,
     os,
     screenSize: `${window.screen.width}x${window.screen.height}`,
-    viewportSize: `${window.innerWidth}x${window.innerHeight}`,
     devicePixelRatio: window.devicePixelRatio,
     language: navigator.language,
     userAgent: navigator.userAgent,
+  }
+}
+
+export function readPageInfo(): PageInfo {
+  return {
     pageUrl: location.href,
     pageTitle: document.title,
-    capturedAt: new Date().toISOString(),
+    viewportSize: `${window.innerWidth}x${window.innerHeight}`,
   }
+}
+
+export function composeEnvironment(client: ClientEnvironment, page: PageInfo): EnvironmentSnapshot {
+  return { ...client, ...page, capturedAt: new Date().toISOString() }
+}
+
+export async function captureEnvironment(): Promise<EnvironmentSnapshot> {
+  return composeEnvironment(await detectClient(), readPageInfo())
 }

@@ -1,8 +1,12 @@
-import type { ElementTarget } from '@/types'
+import { DEFAULT_SETTINGS, parseTestIdAttributes } from '@/settings/schema'
+import { MAX_TEXT_LENGTH } from '@/shared/constants'
+import type { ElementTarget, LocatorCandidates } from '@/types'
 
-const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-qa', 'data-cy']
+let testIdAttributes = parseTestIdAttributes(DEFAULT_SETTINGS.capture.testIdAttributes)
 
-export const MAX_TEXT_LENGTH = 80
+export function configureTestIdAttributes(attributes: string[]): void {
+  testIdAttributes = attributes
+}
 const MAX_SELECTOR_DEPTH = 6
 
 const INPUT_ROLES: Record<string, string> = {
@@ -47,7 +51,7 @@ function truncate(text: string, max: number): string {
 }
 
 function testId(element: Element): string | null {
-  for (const attribute of TEST_ID_ATTRIBUTES) {
+  for (const attribute of testIdAttributes) {
     const value = element.getAttribute(attribute)
     if (value) {
       return value
@@ -210,43 +214,39 @@ export function buildCssSelector(element: Element): string {
   return parts.join(' > ')
 }
 
+// Ordered by how resilient the resulting Playwright locator is to markup churn.
+export const STRATEGY_ORDER = ['testId', 'role', 'label', 'placeholder', 'text', 'css'] as const
+
 export function resolveTarget(element: Element): ElementTarget {
   const cssSelector = buildCssSelector(element)
-  const tagName = element.tagName.toLowerCase()
   const role = implicitRole(element) ?? undefined
   const name = accessibleName(element)
   const textSnippet = truncate(collapse(element.textContent), MAX_TEXT_LENGTH) || undefined
 
-  const base = {
-    tagName,
+  const candidates: LocatorCandidates = { css: cssSelector }
+
+  const id = testId(element)
+  if (id) candidates.testId = id
+  if (role && name) candidates.role = role
+
+  const label = labelText(element)
+  if (label) candidates.label = label
+
+  const placeholder = collapse(element.getAttribute('placeholder'))
+  if (placeholder) candidates.placeholder = placeholder
+
+  if (textSnippet) candidates.text = textSnippet
+
+  const strategy = STRATEGY_ORDER.find((option) => candidates[option] !== undefined) ?? 'css'
+
+  return {
+    strategy,
+    value: candidates[strategy] ?? cssSelector,
+    tagName: element.tagName.toLowerCase(),
     cssSelector,
     role,
     accessibleName: name || undefined,
     textSnippet,
+    candidates,
   }
-
-  const id = testId(element)
-  if (id) {
-    return { ...base, strategy: 'testId', value: id }
-  }
-
-  if (role && name) {
-    return { ...base, strategy: 'role', value: role }
-  }
-
-  const label = labelText(element)
-  if (label) {
-    return { ...base, strategy: 'label', value: label }
-  }
-
-  const placeholder = collapse(element.getAttribute('placeholder'))
-  if (placeholder) {
-    return { ...base, strategy: 'placeholder', value: placeholder }
-  }
-
-  if (textSnippet) {
-    return { ...base, strategy: 'text', value: textSnippet }
-  }
-
-  return { ...base, strategy: 'css', value: cssSelector }
 }
