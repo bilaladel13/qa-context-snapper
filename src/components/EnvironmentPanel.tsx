@@ -1,24 +1,43 @@
+import type { EnvironmentSnapshot } from '@/types'
 import { Section } from './Section'
 
-const PLACEHOLDER_ROWS = [
-  { label: 'Browser', value: 'Not captured yet' },
-  { label: 'OS', value: 'Not captured yet' },
-  { label: 'Screen size', value: 'Not captured yet' },
-  { label: 'Viewport', value: 'Not captured yet' },
-  { label: 'Page URL', value: 'Not captured yet' },
-]
+interface EnvironmentPanelProps {
+  environment: EnvironmentSnapshot | null
+  loading: boolean
+}
 
-export function EnvironmentPanel() {
+function rows(environment: EnvironmentSnapshot): [string, string][] {
+  return [
+    ['Browser', `${environment.browser} ${environment.browserVersion}`],
+    ['OS', environment.os],
+    ['Screen', `${environment.screenSize} at ${environment.devicePixelRatio}x`],
+    ['Viewport', environment.viewportSize],
+    ['Language', environment.language],
+    ['Page', environment.pageUrl],
+  ]
+}
+
+export function EnvironmentPanel({ environment, loading }: EnvironmentPanelProps) {
   return (
-    <Section title="Environment Data" badge="placeholder">
-      <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-xs">
-        {PLACEHOLDER_ROWS.map((row) => (
-          <div key={row.label} className="contents">
-            <dt className="text-slate-400">{row.label}</dt>
-            <dd className="truncate font-mono text-[11px] text-slate-300">{row.value}</dd>
-          </div>
-        ))}
-      </dl>
+    <Section title="Environment" badge={loading ? 'reading' : undefined}>
+      {environment === null ? (
+        <div className="space-y-1.5" aria-hidden>
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="h-3 animate-pulse rounded bg-surface-hover" />
+          ))}
+        </div>
+      ) : (
+        <dl className="grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 text-xs">
+          {rows(environment).map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-ink-muted">{label}</dt>
+              <dd className="truncate font-mono text-[11px] text-ink" title={value}>
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </Section>
   )
 }

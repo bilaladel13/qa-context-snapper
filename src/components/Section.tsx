@@ -10,11 +10,11 @@ export function Section({ title, badge, children }: SectionProps) {
   return (
     <section className="rounded-lg border border-surface-border bg-surface-raised">
       <div className="flex items-center justify-between border-b border-surface-border px-3 py-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
           {title}
         </h2>
         {badge ? (
-          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
             {badge}
           </span>
         ) : null}

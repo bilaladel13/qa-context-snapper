@@ -1,23 +1,101 @@
 @import 'tailwindcss';
 
+/* Every token carries both themes through light-dark(), so switching is just a
+   change of color-scheme below. That also means the correct palette is applied
+   on the very first paint, with no inline script and no flash. */
 @theme {
-  --color-surface: oklch(0.19 0.02 265);
-  --color-surface-raised: oklch(0.24 0.02 265);
-  --color-surface-border: oklch(0.32 0.02 265);
-  --color-accent: oklch(0.72 0.16 250);
-  --color-accent-strong: oklch(0.64 0.18 250);
+  --color-surface: light-dark(oklch(0.99 0.002 265), oklch(0.18 0.02 265));
+  --color-surface-raised: light-dark(oklch(1 0 0), oklch(0.23 0.02 265));
+  --color-surface-sunken: light-dark(oklch(0.96 0.004 265), oklch(0.14 0.02 265));
+  --color-surface-hover: light-dark(oklch(0.94 0.006 265), oklch(0.28 0.02 265));
+  --color-surface-border: light-dark(oklch(0.89 0.008 265), oklch(0.31 0.02 265));
+
+  --color-ink: light-dark(oklch(0.23 0.02 265), oklch(0.97 0.005 265));
+  --color-ink-muted: light-dark(oklch(0.46 0.02 265), oklch(0.72 0.02 265));
+  --color-ink-subtle: light-dark(oklch(0.6 0.02 265), oklch(0.56 0.02 265));
+
+  --color-accent: light-dark(oklch(0.55 0.19 250), oklch(0.72 0.16 250));
+  --color-accent-strong: light-dark(oklch(0.48 0.2 250), oklch(0.62 0.18 250));
+  --color-on-accent: oklch(1 0 0);
+
+  --color-danger: light-dark(oklch(0.55 0.22 20), oklch(0.68 0.2 20));
+  --color-danger-strong: light-dark(oklch(0.48 0.23 20), oklch(0.58 0.22 20));
+  --color-danger-surface: light-dark(oklch(0.96 0.03 20), oklch(0.26 0.07 20));
+  --color-danger-border: light-dark(oklch(0.85 0.08 20), oklch(0.38 0.1 20));
+  --color-danger-ink: light-dark(oklch(0.44 0.2 20), oklch(0.85 0.09 20));
+
+  --color-warn-surface: light-dark(oklch(0.97 0.05 85), oklch(0.28 0.06 75));
+  --color-warn-border: light-dark(oklch(0.85 0.1 85), oklch(0.42 0.09 75));
+  --color-warn-ink: light-dark(oklch(0.45 0.13 65), oklch(0.86 0.11 75));
+
+  --color-notice-surface: light-dark(oklch(0.96 0.04 320), oklch(0.27 0.07 320));
+  --color-notice-border: light-dark(oklch(0.86 0.08 320), oklch(0.4 0.1 320));
+  --color-notice-ink: light-dark(oklch(0.44 0.19 320), oklch(0.85 0.1 320));
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 html,
-body {
+body,
+#root {
   margin: 0;
   padding: 0;
 }
 
+html {
+  background-color: var(--color-surface);
+}
+
 body {
   width: 400px;
-  min-height: 320px;
+  height: 560px;
+  overflow: hidden;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  color: var(--color-slate-100);
+  color: var(--color-ink);
   background-color: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface-border);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-ink-subtle);
 }
