@@ -6,10 +6,11 @@ import type { CaptureSettings } from '@/settings/schema'
 import { loadSettings, onSettingsChanged } from '@/settings/store'
 import { MAX_VALUE_LENGTH } from '@/shared/constants'
 import { captureEnvironment } from '@/shared/environment'
+import { collapse } from '@/shared/text'
 import type { ConsoleErrorEntry, InteractionEvent, InteractionType } from '@/types'
 import { CONSOLE_CHANNEL } from './bridge-protocol'
 import type { BridgeControl, BridgeMessage } from './bridge-protocol'
-import { collapse, configureTestIdAttributes, resolveTarget } from './locator'
+import { configureTestIdAttributes, resolveTarget } from './locator'
 
 const INPUT_FLUSH_MS = 400
 const MASK = '[redacted]'

@@ -1,13 +1,19 @@
 import { DEFAULT_SETTINGS, parseTestIdAttributes } from '@/settings/schema'
 import { MAX_TEXT_LENGTH } from '@/shared/constants'
-import type { ElementTarget, LocatorCandidates } from '@/types'
+import { collapse, looseMatches, trimEllipsis, truncate } from '@/shared/text'
+import type { ElementTarget, LocatorCandidate, LocatorCandidates, LocatorStrategy } from '@/types'
 
 let testIdAttributes = parseTestIdAttributes(DEFAULT_SETTINGS.capture.testIdAttributes)
 
 export function configureTestIdAttributes(attributes: string[]): void {
   testIdAttributes = attributes
 }
+
 const MAX_SELECTOR_DEPTH = 6
+
+// Counting text matches means reading textContent for every element, so very
+// large pages skip the check and emit a bare locator rather than stalling a click.
+const MAX_SCAN_ELEMENTS = 2500
 
 const INPUT_ROLES: Record<string, string> = {
   button: 'button',
@@ -42,19 +48,47 @@ const TAG_ROLES: Record<string, string> = {
   FORM: 'form',
 }
 
-export function collapse(text: string | null | undefined): string {
-  return (text ?? '').replace(/\s+/g, ' ').trim()
+// Narrows the element set before the per element role check, so counting never
+// walks the whole document for a role query.
+const ROLE_SELECTORS: Record<string, string> = {
+  button: 'button, input[type="button"], input[type="submit"], input[type="reset"], input[type="image"]',
+  link: 'a[href]',
+  checkbox: 'input[type="checkbox"]',
+  radio: 'input[type="radio"]',
+  textbox:
+    'textarea, input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"]',
+  searchbox: 'input[type="search"]',
+  combobox: 'select',
+  listbox: 'select[multiple]',
+  slider: 'input[type="range"]',
+  spinbutton: 'input[type="number"]',
+  heading: 'h1, h2, h3, h4, h5, h6',
+  img: 'img',
+  navigation: 'nav',
+  main: 'main',
+  table: 'table',
+  form: 'form',
 }
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}...` : text
+const LABELLABLE = 'input, select, textarea, [contenteditable="true"], [contenteditable=""]'
+
+function attributeSelector(name: string, value: string): string {
+  return `[${name}="${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`
 }
 
-function testId(element: Element): string | null {
+function queryAll(selector: string): Element[] | null {
+  try {
+    return Array.from(document.querySelectorAll(selector))
+  } catch {
+    return null
+  }
+}
+
+function testIdOf(element: Element): { attribute: string; value: string } | null {
   for (const attribute of testIdAttributes) {
     const value = element.getAttribute(attribute)
     if (value) {
-      return value
+      return { attribute, value }
     }
   }
   return null
@@ -158,11 +192,7 @@ function stableClasses(element: Element): string[] {
 }
 
 function isUnique(selector: string): boolean {
-  try {
-    return document.querySelectorAll(selector).length === 1
-  } catch {
-    return false
-  }
+  return queryAll(selector)?.length === 1
 }
 
 function typeIndex(element: Element): number {
@@ -214,6 +244,103 @@ export function buildCssSelector(element: Element): string {
   return parts.join(' > ')
 }
 
+// Playwright's text engine resolves to the smallest element containing the
+// text, so an ancestor that only matches through its descendants is excluded.
+function textMatches(value: string): Element[] | null {
+  const all = queryAll('body *')
+
+  if (!all || all.length > MAX_SCAN_ELEMENTS) {
+    return null
+  }
+
+  return all.filter((element) => {
+    if (!looseMatches(element.textContent, value)) {
+      return false
+    }
+
+    return !Array.from(element.children).some((child) => looseMatches(child.textContent, value))
+  })
+}
+
+function labelMatches(value: string): Element[] | null {
+  return (
+    queryAll(LABELLABLE)?.filter(
+      (element) =>
+        looseMatches(labelText(element), value) ||
+        looseMatches(element.getAttribute('aria-label'), value),
+    ) ?? null
+  )
+}
+
+function roleMatches(role: string, name: string): Element[] | null {
+  const scoped = ROLE_SELECTORS[role]
+  const selector = scoped
+    ? `${scoped}, ${attributeSelector('role', role)}`
+    : attributeSelector('role', role)
+
+  const candidates = queryAll(selector)
+
+  if (!candidates) {
+    return null
+  }
+
+  return candidates.filter((element) => {
+    if (implicitRole(element) !== role) {
+      return false
+    }
+
+    return name === '' || looseMatches(accessibleName(element), name)
+  })
+}
+
+// Emulates what the emitted locator will actually resolve to in the browser, so
+// the recorded index matches Playwright's own ordering.
+function matchesFor(
+  strategy: LocatorStrategy,
+  value: string,
+  context: { name: string; testIdAttribute: string | null },
+): Element[] | null {
+  switch (strategy) {
+    case 'testId':
+      return context.testIdAttribute
+        ? queryAll(attributeSelector(context.testIdAttribute, value))
+        : null
+    case 'role':
+      return roleMatches(value, trimEllipsis(context.name))
+    case 'label':
+      return labelMatches(trimEllipsis(value))
+    case 'placeholder':
+      return (
+        queryAll('[placeholder]')?.filter((element) =>
+          looseMatches(element.getAttribute('placeholder'), trimEllipsis(value)),
+        ) ?? null
+      )
+    case 'text':
+      return textMatches(trimEllipsis(value))
+    case 'css':
+      return queryAll(value)
+  }
+}
+
+function describeCandidate(
+  element: Element,
+  strategy: LocatorStrategy,
+  value: string,
+  context: { name: string; testIdAttribute: string | null },
+): LocatorCandidate {
+  const matches = matchesFor(strategy, value, context)
+
+  if (!matches || matches.length <= 1) {
+    return { value }
+  }
+
+  const nth = matches.indexOf(element)
+
+  // A negative index means the emulation disagrees with the real DOM, so the
+  // count cannot be trusted either. A bare locator beats a wrong .nth().
+  return nth < 0 ? { value } : { value, nth, total: matches.length }
+}
+
 // Ordered by how resilient the resulting Playwright locator is to markup churn.
 export const STRATEGY_ORDER = ['testId', 'role', 'label', 'placeholder', 'text', 'css'] as const
 
@@ -222,31 +349,38 @@ export function resolveTarget(element: Element): ElementTarget {
   const role = implicitRole(element) ?? undefined
   const name = accessibleName(element)
   const textSnippet = truncate(collapse(element.textContent), MAX_TEXT_LENGTH) || undefined
+  const identifier = testIdOf(element)
 
-  const candidates: LocatorCandidates = { css: cssSelector }
+  const context = { name, testIdAttribute: identifier?.attribute ?? null }
+  const raw: Partial<Record<LocatorStrategy, string>> = { css: cssSelector }
 
-  const id = testId(element)
-  if (id) candidates.testId = id
-  if (role && name) candidates.role = role
+  if (identifier) raw.testId = identifier.value
+  if (role && name) raw.role = role
 
   const label = labelText(element)
-  if (label) candidates.label = label
+  if (label) raw.label = label
 
   const placeholder = collapse(element.getAttribute('placeholder'))
-  if (placeholder) candidates.placeholder = placeholder
+  if (placeholder) raw.placeholder = placeholder
 
-  if (textSnippet) candidates.text = textSnippet
+  if (textSnippet) raw.text = textSnippet
+
+  const candidates: LocatorCandidates = {}
+  for (const [strategy, value] of Object.entries(raw) as [LocatorStrategy, string][]) {
+    candidates[strategy] = describeCandidate(element, strategy, value, context)
+  }
 
   const strategy = STRATEGY_ORDER.find((option) => candidates[option] !== undefined) ?? 'css'
 
   return {
     strategy,
-    value: candidates[strategy] ?? cssSelector,
+    value: candidates[strategy]?.value ?? cssSelector,
     tagName: element.tagName.toLowerCase(),
     cssSelector,
     role,
     accessibleName: name || undefined,
     textSnippet,
+    testIdAttribute: identifier?.attribute,
     candidates,
   }
 }

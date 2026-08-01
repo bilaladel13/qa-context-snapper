@@ -36,7 +36,15 @@ export type InteractionType = 'click' | 'input' | 'change' | 'submit' | 'keydown
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'
 
-export type LocatorCandidates = Partial<Record<LocatorStrategy, string>>
+export interface LocatorCandidate {
+  value: string
+  // Set only when this locator resolves to more than one element, which would
+  // otherwise be a Playwright strict mode violation. Zero based.
+  nth?: number
+  total?: number
+}
+
+export type LocatorCandidates = Partial<Record<LocatorStrategy, LocatorCandidate>>
 
 export interface ElementTarget {
   strategy: LocatorStrategy
@@ -46,6 +54,7 @@ export interface ElementTarget {
   tagName: string
   cssSelector: string
   textSnippet?: string
+  testIdAttribute?: string
   candidates?: LocatorCandidates
 }
 

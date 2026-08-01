@@ -11,9 +11,10 @@
     "build:watch": "vite build --watch",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run build && node scripts/verify-build.mjs && node scripts/verify-bridge.mjs",
+    "verify": "npm run build && node scripts/verify-build.mjs && node scripts/verify-bridge.mjs && node scripts/verify-locator.mjs && node scripts/preview-report.mjs --quiet",
     "verify:build": "node scripts/verify-build.mjs",
     "verify:bridge": "node scripts/verify-bridge.mjs",
+    "verify:locator": "node scripts/verify-locator.mjs",
     "preview:report": "node scripts/preview-report.mjs",
     "zip": "npm run build && node scripts/zip.mjs"
   },
@@ -29,6 +30,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.2.0"
