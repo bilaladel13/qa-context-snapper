@@ -70,9 +70,10 @@ because the worker is executing DOM code. `npm run verify:build` asserts the wir
 | `npm run build`           | Type check, then production build into `dist/`      |
 | `npm run build:watch`     | Production build, rebuilt on change                 |
 | `npm run typecheck`       | `tsc --noEmit` only                                 |
-| `npm run verify`          | Build, then run both verifiers below                |
+| `npm run verify`          | Build, then run every verifier below                |
 | `npm run verify:build`    | Assert the loaders point at the right chunks        |
 | `npm run verify:bridge`   | Prove the MAIN world console bridge still serializes |
+| `npm run verify:locator`  | Run locator resolution against a jsdom page         |
 | `npm run preview:report`  | Render a sample report and syntax-check the script  |
 | `npm run zip`             | Build and package `dist/` into `release/*.zip`      |
 
@@ -233,6 +234,32 @@ just the winning one. The generator picks from those candidates at output time, 
 selector preference, structure or quote style re-emits the script from the stored snapshot. The
 background watches `chrome.storage.onChanged` and regenerates automatically, so the result view
 updates while the settings are open.
+
+### Strict mode safe locators
+
+Playwright fails a step when a locator resolves to more than one element, which
+`getByTestId('delete-btn')` does the moment a table has several rows. At capture time
+[locator.ts](src/content/locator.ts) queries the live DOM for each candidate and, when a locator
+matches more than one element, records the target's index among the matches. The generator then
+emits `.nth(2)`.
+
+The index is stored **per strategy**, not once per element. `getByTestId('delete-btn')` might match
+3 elements while `getByRole('button', { name: 'Delete' })` matches 12, and the selector preference
+lets the generator switch between them later, so a single shared index would be wrong.
+
+Counting emulates what the emitted locator will actually resolve to: substring and
+case-insensitive matching for text, label, placeholder and role names, matching Playwright's
+defaults, and the smallest containing element for text so a wrapping ancestor does not inflate the
+count. If the emulation cannot find the target among its own matches, the index is dropped rather
+than guessed, since a wrong `.nth()` is worse than a bare locator. Pages above 2500 elements skip
+the text scan so a click is never delayed.
+
+### Relative navigation
+
+`page.goto('http://localhost:5174/dashboard')` breaks as soon as the dev server picks a different
+port. With relative navigation on, only the recording's own origin becomes a path, so the script
+follows `baseURL` from `playwright.config.ts`. A URL on any other origin stays absolute, because
+`baseURL` cannot cover both, and the header comment names the origin to configure.
 
 ### Known limitations
 

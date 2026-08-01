@@ -158,6 +158,14 @@ export function SettingsView({ controller, shortcut, onOpenShortcuts }: Settings
             />
           </Field>
 
+          <Field label="Relative navigation" hint="Emits page.goto('/dashboard') instead of the recorded host and port, so the test follows baseURL in playwright.config.ts. A dev server on a different port then still works. URLs on other origins stay absolute.">
+            <Toggle
+              label="Relative navigation"
+              checked={settings.playwright.useRelativeUrls}
+              onChange={(useRelativeUrls) => setPlaywright({ useRelativeUrls })}
+            />
+          </Field>
+
           <Field
             label="Secret variable"
             hint="Redacted field values are emitted as process.env.NAME instead of the captured text, so the script runs without embedding a credential."

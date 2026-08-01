@@ -1,6 +1,14 @@
-import { MAX_TEXT_LENGTH } from '@/shared/constants'
 import type { QuoteStyle, SelectorPreference } from '@/settings/schema'
-import type { ElementTarget, InteractionEvent, LocatorStrategy } from '@/types'
+import { trimEllipsis } from '@/shared/text'
+import type {
+  ElementTarget,
+  InteractionEvent,
+  LocatorCandidate,
+  LocatorCandidates,
+  LocatorStrategy,
+} from '@/types'
+
+export { trimEllipsis }
 
 const AUTO_ORDER: LocatorStrategy[] = ['testId', 'role', 'label', 'placeholder', 'text', 'css']
 
@@ -16,13 +24,6 @@ export function quote(value: string, style: QuoteStyle = 'single'): string {
   return `${delimiter}${escaped}${delimiter}`
 }
 
-// Captures longer than the limit are stored with a trailing ellipsis that would
-// never match the real text. A shorter value ending in "..." is genuine content.
-export function trimEllipsis(value: string): string {
-  const wasTruncated = value.length >= MAX_TEXT_LENGTH && value.endsWith('...')
-  return wasTruncated ? value.slice(0, -3).trimEnd() : value
-}
-
 export function escapeTableCell(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 }
@@ -30,6 +31,30 @@ export function escapeTableCell(value: string): string {
 export interface ResolvedLocator {
   strategy: LocatorStrategy
   value: string
+  nth?: number
+}
+
+function readCandidate(raw: unknown): LocatorCandidate | null {
+  if (typeof raw === 'string') {
+    return raw === '' ? null : { value: raw }
+  }
+
+  const candidate = raw as LocatorCandidate | undefined
+
+  return candidate && typeof candidate.value === 'string' && candidate.value !== ''
+    ? candidate
+    : null
+}
+
+function candidatesOf(target: ElementTarget): LocatorCandidates {
+  if (target.candidates && Object.keys(target.candidates).length > 0) {
+    return target.candidates
+  }
+
+  return {
+    [target.strategy]: { value: target.value },
+    css: { value: target.cssSelector },
+  }
 }
 
 // Candidates are recorded for every strategy, so the preferred one can be
@@ -38,13 +63,13 @@ export function resolveStrategy(
   target: ElementTarget,
   preference: SelectorPreference,
 ): ResolvedLocator {
-  const candidates = target.candidates ?? { [target.strategy]: target.value, css: target.cssSelector }
+  const candidates = candidatesOf(target)
   const order = preference === 'auto' ? AUTO_ORDER : [preference, ...AUTO_ORDER]
 
   for (const strategy of order) {
-    const value = candidates[strategy]
-    if (value !== undefined && value !== '') {
-      return { strategy, value }
+    const candidate = readCandidate(candidates[strategy])
+    if (candidate) {
+      return { strategy, value: candidate.value, nth: candidate.nth }
     }
   }
 
@@ -94,4 +119,33 @@ export function describeStep(step: InteractionEvent): string {
 export function parseViewport(viewport: string): { width: number; height: number } | null {
   const match = viewport.match(/^(\d+)x(\d+)$/)
   return match ? { width: Number(match[1]), height: Number(match[2]) } : null
+}
+
+export function originOf(url: string): string | null {
+  try {
+    const { origin } = new URL(url)
+    return origin === 'null' ? null : origin
+  } catch {
+    return null
+  }
+}
+
+// Only the recording's own origin becomes relative. A run that crosses into a
+// different host keeps that URL absolute, since baseURL cannot cover both.
+export function relativizeUrl(url: string, baseOrigin: string | null): string {
+  if (!baseOrigin) {
+    return url
+  }
+
+  try {
+    const parsed = new URL(url)
+
+    if (parsed.origin !== baseOrigin) {
+      return url
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/'
+  } catch {
+    return url
+  }
 }

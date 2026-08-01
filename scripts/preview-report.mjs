@@ -5,6 +5,12 @@ import { build } from 'vite'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = resolve(ROOT, 'node_modules', '.qa-snapper-preview')
 
+// --quiet keeps the sample output out of the verify run; the checks still fail loudly.
+const QUIET = process.argv.includes('--quiet')
+const show = (text) => {
+  if (!QUIET) process.stdout.write(text)
+}
+
 await build({
   root: ROOT,
   configFile: false,
@@ -26,13 +32,23 @@ const started = Date.parse('2026-07-30T10:00:00.000Z')
 const at = (offset) => started + offset
 
 const target = (over) => {
-  const merged = { strategy: 'css', value: '', tagName: 'div', cssSelector: 'div', ...over }
+  const { nth, ...merged } = {
+    strategy: 'css',
+    value: '',
+    tagName: 'div',
+    cssSelector: 'div',
+    ...over,
+  }
+
   return {
     ...merged,
     candidates: {
-      css: merged.cssSelector,
-      [merged.strategy]: merged.value,
-      ...(merged.accessibleName ? { text: merged.accessibleName } : {}),
+      css: { value: merged.cssSelector },
+      ...(merged.accessibleName ? { text: { value: merged.accessibleName } } : {}),
+      [merged.strategy]: {
+        value: merged.value,
+        ...(nth === undefined ? {} : { nth, total: nth + 2 }),
+      },
     },
   }
 }
@@ -78,10 +94,10 @@ const snapshot = {
 
 const report = generateReport(snapshot)
 
-process.stdout.write('================ MARKDOWN ================\n')
-process.stdout.write(report.markdown)
-process.stdout.write('\n================ PLAYWRIGHT ================\n')
-process.stdout.write(report.playwrightScript)
+show('================ MARKDOWN ================\n')
+show(report.markdown)
+show('\n================ PLAYWRIGHT ================\n')
+show(report.playwrightScript)
 
 const DEFAULTS = {
   testTitle: 'Bug Reproduction',
@@ -92,7 +108,47 @@ const DEFAULTS = {
   includeHeader: true,
   setViewport: true,
   includeConsoleAssertion: true,
+  useRelativeUrls: true,
   secretEnvVar: 'QA_SNAPPER_SECRET',
+}
+
+// A dev server on a random port, a table of identical delete buttons, and a
+// hop to a different origin part way through.
+const localhostSnapshot = {
+  sessionId: 'localhost',
+  startedAt: started,
+  stoppedAt: at(20_000),
+  environment: { ...snapshot.environment, pageUrl: 'http://localhost:5174/dashboard' },
+  consoleErrors: [],
+  interactions: [
+    { id: 'l1', type: 'navigation', target: null, value: 'http://localhost:5174/dashboard', url: 'x', timestamp: at(0) },
+    { id: 'l2', type: 'click', target: target({ strategy: 'testId', value: 'delete-btn', nth: 2, tagName: 'button', cssSelector: 'tr:nth-of-type(3) > button' }), url: 'x', timestamp: at(1000) },
+    { id: 'l3', type: 'click', target: target({ strategy: 'testId', value: 'confirm-btn', tagName: 'button', cssSelector: '#confirm' }), url: 'x', timestamp: at(2000) },
+    { id: 'l4', type: 'navigation', target: null, value: 'http://localhost:5174/dashboard?deleted=1#row-3', url: 'x', timestamp: at(3000) },
+    { id: 'l5', type: 'navigation', target: null, value: 'https://auth.example.com/login', url: 'x', timestamp: at(4000) },
+  ],
+}
+
+// The pre Phase 5 shape stored candidates as plain strings.
+const legacySnapshot = {
+  ...localhostSnapshot,
+  sessionId: 'legacy',
+  interactions: [
+    localhostSnapshot.interactions[0],
+    {
+      id: 'g1',
+      type: 'click',
+      target: {
+        strategy: 'testId',
+        value: 'delete-btn',
+        tagName: 'button',
+        cssSelector: 'button',
+        candidates: { testId: 'delete-btn', css: 'button' },
+      },
+      url: 'x',
+      timestamp: at(1000),
+    },
+  ],
 }
 
 const VARIANTS = [
@@ -118,7 +174,7 @@ function parses(script) {
   }
 }
 
-process.stdout.write('\n================ VARIANTS ================\n')
+show('\n================ VARIANTS ================\n')
 
 let failed = false
 
@@ -135,11 +191,45 @@ for (const [name, overrides] of VARIANTS) {
 }
 
 const stepsSample = generatePlaywrightScript(snapshot, { ...DEFAULTS, structure: 'steps' })
-process.stdout.write('\n--- test.step sample ---\n')
-process.stdout.write(stepsSample.split('\n').slice(0, 24).join('\n') + '\n')
+show('\n--- test.step sample ---\n')
+show(stepsSample.split('\n').slice(0, 24).join('\n') + '\n')
+
+show('\n================ RESILIENCY ================\n')
+
+const relative = generatePlaywrightScript(localhostSnapshot, DEFAULTS)
+const absolute = generatePlaywrightScript(localhostSnapshot, { ...DEFAULTS, useRelativeUrls: false })
+const forcedCss = generatePlaywrightScript(localhostSnapshot, {
+  ...DEFAULTS,
+  selectorPreference: 'css',
+})
+const legacy = generatePlaywrightScript(legacySnapshot, DEFAULTS)
+
+show('\n--- relative navigation ---\n')
+show(relative + '\n')
+
+const checks = [
+  ['duplicate test id gets .nth(2)', relative.includes(".getByTestId('delete-btn').nth(2)")],
+  ['unique test id stays bare', relative.includes(".getByTestId('confirm-btn').click()")],
+  ['start url becomes a path', relative.includes("page.goto('/dashboard')")],
+  ['query and hash survive', relative.includes("page.goto('/dashboard?deleted=1#row-3')")],
+  ['other origins stay absolute', relative.includes("page.goto('https://auth.example.com/login')")],
+  ['baseURL hint is emitted', relative.includes("Set baseURL to 'http://localhost:5174'")],
+  ['toggling off keeps the full url', absolute.includes("page.goto('http://localhost:5174/dashboard')")],
+  ['toggling off drops the hint', !absolute.includes('Set baseURL')],
+  ['forced css ignores the test id index', !forcedCss.includes('.nth(2)')],
+  ['legacy string candidates still resolve', legacy.includes(".getByTestId('delete-btn')")],
+  ['every resiliency script parses', [relative, absolute, forcedCss, legacy].every((s) => parses(s) === null)],
+]
+
+show('\n')
+
+for (const [name, passed] of checks) {
+  process.stdout.write(`${passed ? 'ok  ' : 'FAIL'}  ${name}\n`)
+  if (!passed) failed = true
+}
 
 if (failed) {
   process.exitCode = 1
 } else {
-  process.stdout.write('\nSYNTAX CHECK: every variant parses as valid JavaScript\n')
+  process.stdout.write('\nALL CHECKS PASSED\n')
 }
