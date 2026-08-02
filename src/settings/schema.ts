@@ -22,10 +22,22 @@ export interface CaptureSettings {
   testIdAttributes: string
 }
 
+// The Jira credentials live in their own storage key. Only the non secret
+// selection is a preference.
+export interface JiraSettings {
+  projectKey: string
+  projectName: string
+  issueTypeId: string
+  issueTypeName: string
+  includePlaywrightScript: boolean
+  includeConsoleErrors: boolean
+}
+
 export interface Settings {
   theme: ThemePreference
   playwright: PlaywrightSettings
   capture: CaptureSettings
+  jira: JiraSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +59,14 @@ export const DEFAULT_SETTINGS: Settings = {
     trackKeyboard: true,
     testIdAttributes: 'data-testid, data-test-id, data-test, data-qa, data-cy',
   },
+  jira: {
+    projectKey: '',
+    projectName: '',
+    issueTypeId: '',
+    issueTypeName: '',
+    includePlaywrightScript: true,
+    includeConsoleErrors: true,
+  },
 }
 
 export const ENV_VAR_PATTERN = /^[A-Z_][A-Z0-9_]*$/
@@ -59,6 +79,7 @@ export function normalizeSettings(value: unknown): Settings {
 
   const playwright = { ...DEFAULT_SETTINGS.playwright, ...(raw.playwright ?? {}) }
   const capture = { ...DEFAULT_SETTINGS.capture, ...(raw.capture ?? {}) }
+  const jira = { ...DEFAULT_SETTINGS.jira, ...(raw.jira ?? {}) }
 
   return {
     theme: oneOf(raw.theme, ['system', 'light', 'dark'], DEFAULT_SETTINGS.theme),
@@ -73,6 +94,7 @@ export function normalizeSettings(value: unknown): Settings {
       quoteStyle: oneOf(playwright.quoteStyle, ['single', 'double'], DEFAULT_SETTINGS.playwright.quoteStyle),
     },
     capture,
+    jira,
   }
 }
 

@@ -4,6 +4,8 @@ import type {
   ContentResponseMap,
   ContentToBackground,
   ContentToBackgroundResponseMap,
+  JiraRequest,
+  JiraResponseMap,
   PopupQuery,
   PopupQueryResponseMap,
   PopupRequest,
@@ -52,5 +54,11 @@ export function sendToTab<R extends ContentRequest>(
 export function reportToBackground<R extends ContentToBackground>(
   request: R,
 ): Promise<Result<ContentToBackgroundResponseMap[R['type']]>> {
+  return send(() => chrome.runtime.sendMessage(request))
+}
+
+export function callJira<R extends JiraRequest>(
+  request: R,
+): Promise<Result<JiraResponseMap[R['type']]>> {
   return send(() => chrome.runtime.sendMessage(request))
 }

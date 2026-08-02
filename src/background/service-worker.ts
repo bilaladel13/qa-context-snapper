@@ -2,10 +2,12 @@ import { sendToTab } from '@/messaging/client'
 import {
   fail,
   isContentToBackground,
+  isJiraRequest,
   isPopupQuery,
   isPopupRequest,
   ok,
 } from '@/messaging/protocol'
+import { handleJiraRequest } from './jira'
 import type {
   ActiveTabInfo,
   ContentToBackground,
@@ -278,6 +280,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isPopupQuery(message)) {
     return respond(handlePopupQuery(message), sendResponse)
+  }
+
+  if (isJiraRequest(message)) {
+    return respond(handleJiraRequest(message), sendResponse)
   }
 
   return false

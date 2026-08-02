@@ -1,4 +1,10 @@
 import type {
+  JiraConnection,
+  JiraCreatedIssue,
+  JiraDraft,
+  JiraProject,
+} from '@/jira/types'
+import type {
   ConsoleErrorEntry,
   EnvironmentSnapshot,
   InteractionEvent,
@@ -35,6 +41,39 @@ export type PopupQuery = { type: 'GET_ACTIVE_TAB' } | { type: 'FOCUS_RECORDED_TA
 export interface PopupQueryResponseMap {
   GET_ACTIVE_TAB: ActiveTabInfo
   FOCUS_RECORDED_TAB: { focused: boolean }
+}
+
+export type JiraRequest =
+  | { type: 'JIRA_GET_CONNECTION' }
+  | { type: 'JIRA_CONNECT'; domain: string; email: string; token: string }
+  | { type: 'JIRA_DISCONNECT' }
+  | { type: 'JIRA_LIST_PROJECTS' }
+  | { type: 'JIRA_CREATE_ISSUE'; draft: JiraDraft }
+
+export interface JiraResponseMap {
+  JIRA_GET_CONNECTION: { connection: JiraConnection | null }
+  JIRA_CONNECT: { connection: JiraConnection; projects: JiraProject[] }
+  JIRA_DISCONNECT: { disconnected: true }
+  JIRA_LIST_PROJECTS: { projects: JiraProject[] }
+  JIRA_CREATE_ISSUE: JiraCreatedIssue
+}
+
+const JIRA_REQUEST_TYPES = new Set([
+  'JIRA_GET_CONNECTION',
+  'JIRA_CONNECT',
+  'JIRA_DISCONNECT',
+  'JIRA_LIST_PROJECTS',
+  'JIRA_CREATE_ISSUE',
+])
+
+export function isJiraRequest(value: unknown): value is JiraRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const { type } = value as { type?: unknown }
+
+  return typeof type === 'string' && JIRA_REQUEST_TYPES.has(type)
 }
 
 export type ContentRequest =
