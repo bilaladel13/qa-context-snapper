@@ -74,6 +74,7 @@ because the worker is executing DOM code. `npm run verify:build` asserts the wir
 | `npm run verify:build`    | Assert the loaders point at the right chunks        |
 | `npm run verify:bridge`   | Prove the MAIN world console bridge still serializes |
 | `npm run verify:locator`  | Run locator resolution against a jsdom page         |
+| `npm run verify:jira`     | Validate the generated Atlassian Document Format    |
 | `npm run preview:report`  | Render a sample report and syntax-check the script  |
 | `npm run zip`             | Build and package `dist/` into `release/*.zip`      |
 
@@ -261,6 +262,40 @@ port. With relative navigation on, only the recording's own origin becomes a pat
 follows `baseURL` from `playwright.config.ts`. A URL on any other origin stays absolute, because
 `baseURL` cannot cover both, and the header comment names the origin to configure.
 
+### Jira integration
+
+Connect a Jira Cloud site in settings with a site address, account email and API token. The token is
+verified against `/rest/api/3/myself` before anything is stored, so a typo fails at the point of
+entry rather than when filing a ticket.
+
+Projects are loaded from `/rest/api/3/project/search?expand=issueTypes`, which returns each
+project's issue types in the same call. That matters because issue type ids are per project on team
+managed sites, so a "Bug" id from one project is invalid in another. Changing the project reselects
+Bug where it exists and falls back to the first available type.
+
+The description is Atlassian Document Format, built directly from the `ContextSnapshot` in
+[adf.ts](src/jira/adf.ts) rather than by converting the Markdown report. Generating both from the
+same source removes a Markdown parser that would otherwise have to be kept in sync, and gives real
+ADF nodes: an environment table, an ordered list of steps, and the Playwright script as a
+`codeBlock` with `language: typescript` so Jira renders it with syntax highlighting.
+
+Requests run in the service worker, not the popup. The popup is destroyed whenever it loses focus,
+which would abort an in-flight request, and keeping the call in the worker means the token never
+enters a page adjacent context.
+
+#### On credential storage
+
+`chrome.storage.local` is sandboxed to this extension, so other extensions and page scripts cannot
+read it, but it is not encrypted at rest. No extension storage is. The token is therefore treated as
+a revocable credential:
+
+- stored under its own key, never inside the settings object that other code reads and writes
+- never returned to the popup once saved; the UI receives only the domain, email and a boolean
+- cleared from component state as soon as Jira accepts it
+- only ever sent to the configured site
+
+Revoke it from your Atlassian account if the machine is shared or lost.
+
 ### Known limitations
 
 - The console bridge is re-injected after a navigation in response to `CONTENT_HELLO`, so errors
@@ -291,6 +326,8 @@ The `@` alias maps to `src/`.
 - [x] Copy to clipboard and file export
 - [x] Settings engine, light and dark themes, configurable Playwright output
 - [x] Keyboard shortcut and recording badge
+- [x] Strict mode safe locators and relative navigation
+- [x] Jira Cloud ticket creation
 - [ ] Screenshot attachment
 - [ ] Follow recordings across newly opened tabs
 
