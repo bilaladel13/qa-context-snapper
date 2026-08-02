@@ -4,6 +4,8 @@ import type {
   ContentResponseMap,
   ContentToBackground,
   ContentToBackgroundResponseMap,
+  DownloadRequest,
+  DownloadResponseMap,
   JiraRequest,
   JiraResponseMap,
   PopupQuery,
@@ -60,5 +62,11 @@ export function reportToBackground<R extends ContentToBackground>(
 export function callJira<R extends JiraRequest>(
   request: R,
 ): Promise<Result<JiraResponseMap[R['type']]>> {
+  return send(() => chrome.runtime.sendMessage(request))
+}
+
+export function requestDownload(
+  request: DownloadRequest,
+): Promise<Result<DownloadResponseMap['DOWNLOAD_FILE']>> {
   return send(() => chrome.runtime.sendMessage(request))
 }

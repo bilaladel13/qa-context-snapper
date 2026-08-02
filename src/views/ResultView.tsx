@@ -41,7 +41,17 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
     return `${slugify(title)}-${date}`
   }, [state.snapshot, state.tabTitle, state.stoppedAt])
 
+  // Each tab keeps its own name so switching back and forth does not overwrite
+  // a filename the tester already adjusted.
+  const [names, setNames] = useState<Record<Tab, string | null>>({
+    markdown: null,
+    playwright: null,
+  })
+
   const isMarkdown = active === 'markdown'
+  const extension = isMarkdown ? '.md' : '.spec.ts'
+  const filename = names[active] ?? `${baseName}${extension}`
+
   const content = isMarkdown
     ? (state.report?.markdown ?? '')
     : (state.report?.playwrightScript ?? '')
@@ -70,8 +80,10 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
         <CodeBlock
           content={content}
           placeholder={PLACEHOLDERS[active]}
-          filename={isMarkdown ? `${baseName}.md` : `${baseName}.spec.ts`}
+          filename={filename}
+          extension={extension}
           mimeType={isMarkdown ? 'text/markdown' : 'text/plain'}
+          onFilenameChange={(next) => setNames((current) => ({ ...current, [active]: next }))}
         />
 
         {snapshot === null ? (

@@ -3,6 +3,7 @@ import type {
   JiraCreatedIssue,
   JiraDraft,
   JiraProject,
+  JiraUser,
 } from '@/jira/types'
 import type {
   ConsoleErrorEntry,
@@ -48,6 +49,7 @@ export type JiraRequest =
   | { type: 'JIRA_CONNECT'; domain: string; email: string; token: string }
   | { type: 'JIRA_DISCONNECT' }
   | { type: 'JIRA_LIST_PROJECTS' }
+  | { type: 'JIRA_LIST_ASSIGNEES'; projectKey: string }
   | { type: 'JIRA_CREATE_ISSUE'; draft: JiraDraft }
 
 export interface JiraResponseMap {
@@ -55,6 +57,7 @@ export interface JiraResponseMap {
   JIRA_CONNECT: { connection: JiraConnection; projects: JiraProject[] }
   JIRA_DISCONNECT: { disconnected: true }
   JIRA_LIST_PROJECTS: { projects: JiraProject[] }
+  JIRA_LIST_ASSIGNEES: { users: JiraUser[] }
   JIRA_CREATE_ISSUE: JiraCreatedIssue
 }
 
@@ -63,8 +66,28 @@ const JIRA_REQUEST_TYPES = new Set([
   'JIRA_CONNECT',
   'JIRA_DISCONNECT',
   'JIRA_LIST_PROJECTS',
+  'JIRA_LIST_ASSIGNEES',
   'JIRA_CREATE_ISSUE',
 ])
+
+export type DownloadRequest = {
+  type: 'DOWNLOAD_FILE'
+  content: string
+  filename: string
+  mimeType: string
+}
+
+export interface DownloadResponseMap {
+  DOWNLOAD_FILE: { downloadId: number | null; cancelled: boolean }
+}
+
+export function isDownloadRequest(value: unknown): value is DownloadRequest {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { type?: unknown }).type === 'DOWNLOAD_FILE'
+  )
+}
 
 export function isJiraRequest(value: unknown): value is JiraRequest {
   if (typeof value !== 'object' || value === null) {

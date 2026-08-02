@@ -1,59 +1,73 @@
 import { useEffect, useState } from 'react'
+import { requestDownload } from '@/messaging/client'
 import { Button } from './Button'
+import { TextInput } from './TextInput'
 import { CheckIcon, CopyIcon, DownloadIcon } from './icons'
 
 interface CodeBlockProps {
   content: string
   placeholder: string
   filename: string
+  extension: string
   mimeType: string
+  onFilenameChange: (filename: string) => void
 }
 
-export function CodeBlock({ content, placeholder, filename, mimeType }: CodeBlockProps) {
+export function CodeBlock({
+  content,
+  placeholder,
+  filename,
+  extension,
+  mimeType,
+  onFilenameChange,
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const isEmpty = content.length === 0
 
   useEffect(() => {
     setCopied(false)
-    setFailed(false)
+    setStatus(null)
   }, [content])
 
   useEffect(() => {
-    if (!copied && !failed) {
+    if (!copied && !status) {
       return
     }
 
     const id = setTimeout(() => {
       setCopied(false)
-      setFailed(false)
-    }, 1600)
+      setStatus(null)
+    }, 2200)
 
     return () => clearTimeout(id)
-  }, [copied, failed])
+  }, [copied, status])
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content)
       setCopied(true)
     } catch {
-      setFailed(true)
+      setStatus('Copy failed')
     }
   }
 
-  // chrome.downloads would need an extra permission; an object URL does not.
-  const handleDownload = () => {
-    const url = URL.createObjectURL(new Blob([content], { type: `${mimeType};charset=utf-8` }))
-    const anchor = document.createElement('a')
+  // The worker owns the download: the Save As dialog takes focus and closes this
+  // popup, which would revoke any object URL created here before Chrome reads it.
+  const handleSave = async () => {
+    setSaving(true)
 
-    anchor.href = url
-    anchor.download = filename
-    anchor.click()
+    const response = await requestDownload({
+      type: 'DOWNLOAD_FILE',
+      content,
+      filename,
+      mimeType,
+    })
 
-    URL.revokeObjectURL(url)
+    setSaving(false)
+    setStatus(response.ok ? (response.data.cancelled ? null : 'Saved') : response.error)
   }
-
-  const copyLabel = failed ? 'Copy failed' : copied ? 'Copied' : 'Copy'
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -61,25 +75,42 @@ export function CodeBlock({ content, placeholder, filename, mimeType }: CodeBloc
         {isEmpty ? <span className="text-ink-subtle">{placeholder}</span> : content}
       </pre>
 
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 items-center gap-2">
+        <TextInput
+          mono
+          value={filename}
+          disabled={isEmpty}
+          aria-label="File name"
+          onChange={(event) => onFilenameChange(event.target.value)}
+          placeholder={`name${extension}`}
+          className="flex-1 py-1.5 text-[11px]"
+        />
         <Button
           variant="ghost"
-          disabled={isEmpty}
-          onClick={handleCopy}
-          className="flex-1 py-2 text-xs"
-          icon={copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-        >
-          {copyLabel}
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={isEmpty}
-          onClick={handleDownload}
-          className="py-2 text-xs"
+          disabled={isEmpty || saving}
+          onClick={() => void handleSave()}
+          className="shrink-0 px-3 py-1.5 text-xs"
           icon={<DownloadIcon className="size-3.5" />}
         >
-          Save
+          {saving ? 'Saving' : 'Save as'}
         </Button>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          variant="ghost"
+          disabled={isEmpty}
+          onClick={() => void handleCopy()}
+          className="flex-1 py-1.5 text-xs"
+          icon={copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+        {status ? (
+          <span className="shrink-0 truncate text-[10px] text-ink-muted" title={status}>
+            {status}
+          </span>
+        ) : null}
       </div>
     </div>
   )

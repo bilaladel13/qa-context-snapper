@@ -32,7 +32,7 @@
       "all_frames": false
     }
   ],
-  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "permissions": ["activeTab", "downloads", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "commands": {
     "toggle-recording": {

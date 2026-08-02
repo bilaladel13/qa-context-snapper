@@ -2,11 +2,13 @@ import { sendToTab } from '@/messaging/client'
 import {
   fail,
   isContentToBackground,
+  isDownloadRequest,
   isJiraRequest,
   isPopupQuery,
   isPopupRequest,
   ok,
 } from '@/messaging/protocol'
+import { startDownload } from './downloads'
 import { handleJiraRequest } from './jira'
 import type {
   ActiveTabInfo,
@@ -284,6 +286,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isJiraRequest(message)) {
     return respond(handleJiraRequest(message), sendResponse)
+  }
+
+  if (isDownloadRequest(message)) {
+    return respond(
+      startDownload({
+        content: message.content,
+        filename: message.filename,
+        mimeType: message.mimeType,
+      }),
+      sendResponse,
+    )
   }
 
   return false
