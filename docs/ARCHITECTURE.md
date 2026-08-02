@@ -118,6 +118,8 @@ src/
   types/index.ts           Shared snapshot, report and recorder state types
 ```
 
+The `@` alias maps to `src/`.
+
 ## Recording architecture
 
 The popup is not a reliable place to hold state: Chrome unmounts it every time it loses focus. The
@@ -447,8 +449,11 @@ Revoke it from your Atlassian account if the machine is shared or lost.
 - The console bridge is re-injected after a navigation in response to `CONTENT_HELLO`, so errors
   logged in the first few milliseconds of a new document can be missed.
 - Recording follows a single tab. Opening a link in a new tab stops capture at that point.
-
-The `@` alias maps to `src/`.
+- A screenshot is only taken when the recorded tab is the one on screen at the moment recording
+  stops, because `captureVisibleTab` photographs the window rather than a chosen tab.
+- The screenshot is attached to the issue rather than embedded in its description. Inline ADF media
+  needs the attachment id and collection, which are only known after upload, so it would take a
+  third request to put the description back.
 
 ## Permissions
 
@@ -458,7 +463,7 @@ The `@` alias maps to `src/`.
 | `scripting`                 | Inject the capture logic on demand                        |
 | `storage`                   | Persist captured snapshots between popup openings         |
 | `downloads`                 | Open the native Save As dialog for generated files        |
-| `host_permissions: <all_urls>` | QA work targets arbitrary staging and production hosts |
+| `host_permissions: <all_urls>` | QA work targets arbitrary staging and production hosts, and it is what `captureVisibleTab` needs, so the screenshot required no new permission |
 
 ## Roadmap
 
@@ -476,8 +481,9 @@ The `@` alias maps to `src/`.
 - [x] Strict mode safe locators and relative navigation
 - [x] Jira Cloud ticket creation
 - [x] Manual assertion capture with an in page inspector
-- [ ] Screenshot attachment
+- [x] Screenshot capture attached to the Jira issue
 - [ ] Follow recordings across newly opened tabs
+- [ ] Embed the screenshot inline in the issue description
 
 ## License
 

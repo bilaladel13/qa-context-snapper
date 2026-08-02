@@ -189,7 +189,9 @@ limitations. Every section is there because something did not work the obvious w
 - A recording follows a single tab; opening a link in a new tab stops capture there.
 - Console errors in the first milliseconds after a navigation can be missed while the bridge
   re-injects.
-- Screenshot attachment is not implemented yet.
+- The screenshot is only taken if the recorded tab is the one on screen when you stop. Stopping via
+  the keyboard from another tab records no image rather than the wrong one.
+- The screenshot is attached to the ticket rather than embedded inline in its description.
 
 ## License
 
