@@ -302,11 +302,23 @@ content is handed to the worker, which turns it into a data URL and calls
 `chrome.downloads.download({ saveAs: true })`. That opens the native dialog so the script can be
 routed straight into a project's `tests/` directory instead of Downloads.
 
-The payload is declared as `application/octet-stream`. Chrome rewrites a download's extension to match
-its MIME type, so `text/plain` appends `.txt` and saves `email-bug.spec.ts` as
-`email-bug.spec.ts.txt`, with the dialog offering only Text Document. An opaque binary type carries
-no extension expectation, so the requested name survives. The type is fixed inside the download layer
-rather than passed in by callers, so it cannot be set back to a text type by accident.
+Chrome derives a download's extension from its MIME type, and on Windows it resolves that through
+`HKEY_CLASSES_ROOT\MIME\Database\Content Type`. Two ways that has gone wrong here:
+
+| Declared type              | Saved as                                          |
+| -------------------------- | ------------------------------------------------- |
+| `text/plain`               | `email-bug.spec.ts.txt`                            |
+| `application/octet-stream` | `email-bug.spec.circ`, from an app that registered the generic type |
+
+So the type is matched to the extension being written: `application/typescript` for scripts and
+`text/markdown` for reports. Not `text/javascript`, which Chrome maps to `.js` and would append to a
+`.ts` name.
+
+Because any such mapping can be overridden by whatever the machine has registered, the name is also
+asserted directly through `downloads.onDeterminingFilename`, which takes precedence over Chrome's own
+derivation. That listener is scoped to downloads this extension started, by checking `byExtensionId`.
+The MIME type is chosen inside the download layer rather than passed in by callers, so it cannot be
+set back to a hijackable type by accident.
 
 Filenames are editable per tab and sanitized before use: Chrome rejects absolute paths, traversal and
 reserved characters, so `../../etc/passwd` becomes `passwd.spec.ts` and the extension is reapplied if

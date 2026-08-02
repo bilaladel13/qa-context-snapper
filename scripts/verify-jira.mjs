@@ -23,7 +23,13 @@ async function buildLib(entry, fileName) {
 }
 
 const { buildDescription, suggestSummary } = await buildLib('src/jira/adf.ts', 'adf')
-const { sanitizeFilename, buildDownloadUrl } = await buildLib(
+// downloads.ts registers a chrome.downloads listener at module scope.
+globalThis.chrome = {
+  runtime: { id: 'test-extension' },
+  downloads: { onDeterminingFilename: { addListener: () => {} } },
+}
+
+const { sanitizeFilename, buildDownloadUrl, mimeForFilename } = await buildLib(
   'src/background/downloads.ts',
   'downloads',
 )
@@ -205,20 +211,45 @@ check(
   filenameCases.every(([input]) => !sanitizeFilename(input, 'bug-report', '.spec.ts').match(/[\\/]/)),
 )
 
-// Chrome appends .txt when the MIME type says text/plain, which turns
-// email-bug.spec.ts into email-bug.spec.ts.txt.
-const downloadUrl = buildDownloadUrl("const a = 'x';\n")
+// Chrome derives the saved extension from the MIME type, and on Windows it
+// consults the registry. text/plain appended .txt; application/octet-stream was
+// claimed by an unrelated desktop app and produced .circ.
+const scriptUrl = buildDownloadUrl("const a = 'x';\n", 'email-bug.spec.ts')
+const reportUrl = buildDownloadUrl('# Bug\n', 'email-bug.md')
 
 check(
-  'download declares an opaque binary type',
-  downloadUrl.startsWith('data:application/octet-stream;base64,'),
-  downloadUrl.slice(0, 48),
+  'scripts declare a typescript type',
+  scriptUrl.startsWith('data:application/typescript;base64,'),
+  scriptUrl.slice(0, 48),
 )
-check('download never declares a text type', !/text\/(plain|markdown)/.test(downloadUrl))
+check(
+  'reports declare a markdown type',
+  reportUrl.startsWith('data:text/markdown;base64,'),
+  reportUrl.slice(0, 48),
+)
+
+const mimeCases = [
+  ['email-bug.spec.ts', 'application/typescript'],
+  ['report.md', 'text/markdown'],
+  ['NAME.SPEC.TS', 'application/typescript'],
+  ['no-extension', 'application/typescript'],
+]
+
+for (const [name, expectedType] of mimeCases) {
+  check(`"${name}" maps to ${expectedType}`, mimeForFilename(name) === expectedType, mimeForFilename(name))
+}
+
+// Both types that have already been rewritten by the OS must stay gone.
+const hijackable = ['application/octet-stream', 'text/plain', 'text/javascript']
+
+check(
+  'no hijackable or extension bearing type is used',
+  hijackable.every((type) => !scriptUrl.includes(type) && !reportUrl.includes(type)),
+)
 
 const utf8Sample = 'const title = "تقرير الخطأ";\n// naïve — em dash…\n'
 const decoded = Buffer.from(
-  buildDownloadUrl(utf8Sample).split(',')[1],
+  buildDownloadUrl(utf8Sample, 'x.spec.ts').split(',')[1],
   'base64',
 ).toString('utf8')
 
