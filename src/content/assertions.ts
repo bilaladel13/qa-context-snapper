@@ -178,10 +178,19 @@ export function pageAssertions(): AssertionOption[] {
   ]
 }
 
-export function toDetail(option: AssertionOption, expected: string): AssertionDetail {
+export const MAX_MESSAGE_LENGTH = 200
+
+export function toDetail(
+  option: AssertionOption,
+  expected: string,
+  message: string,
+): AssertionDetail {
+  const reason = message.trim().slice(0, MAX_MESSAGE_LENGTH)
+
   return {
     kind: option.kind,
     ...(option.editable ? { expected } : {}),
     ...(option.attribute ? { attribute: option.attribute } : {}),
+    ...(reason ? { message: reason } : {}),
   }
 }

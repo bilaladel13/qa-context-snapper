@@ -109,6 +109,13 @@ export function describeTarget(target: ElementTarget | null): string {
 }
 
 export function describeAssertion(step: InteractionEvent): string {
+  const claim = describeClaim(step)
+  const reason = step.assertion?.message
+
+  return reason ? `${claim}, because ${reason}` : claim
+}
+
+function describeClaim(step: InteractionEvent): string {
   const detail = step.assertion
 
   if (!detail) {

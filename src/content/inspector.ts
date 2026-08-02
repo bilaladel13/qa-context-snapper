@@ -1,4 +1,4 @@
-import { pageAssertions, suggestAssertions, toDetail } from './assertions'
+import { MAX_MESSAGE_LENGTH, pageAssertions, suggestAssertions, toDetail } from './assertions'
 import type { AssertionOption } from './assertions'
 import { resolveTarget } from './locator'
 import type { AssertionDetail, ElementTarget } from '@/types'
@@ -143,6 +143,21 @@ const STYLES = `
   color: #fff;
   font-weight: 600;
 }
+.reason {
+  position: sticky;
+  bottom: 0;
+  padding: 6px;
+  background: #0f172a;
+  border-top: 1px solid #1e293b;
+}
+.reason input { width: 100%; box-sizing: border-box; }
+.reason.armed input { border-color: #2563eb; }
+.reason .note {
+  margin: 4px 6px 0;
+  color: #64748b;
+  font-size: 10px;
+}
+.reason.armed .note { color: #60a5fa; }
 `
 
 export interface InspectorHandlers {
@@ -212,6 +227,9 @@ export function openInspector(handlers: InspectorHandlers): void {
 
   let panel: HTMLElement | null = null
   let hovered: Element | null = null
+  // Read at the moment an assertion is chosen, so one field serves every row
+  // instead of each row carrying its own.
+  let readReason: () => string = () => ''
 
   const setHighlight = (element: Element | null) => {
     if (!element) {
@@ -237,6 +255,7 @@ export function openInspector(handlers: InspectorHandlers): void {
   const closePanel = () => {
     panel?.remove()
     panel = null
+    readReason = () => ''
   }
 
   const flash = (message: string) => {
@@ -250,11 +269,13 @@ export function openInspector(handlers: InspectorHandlers): void {
   }
 
   const record = (target: ElementTarget | null, option: AssertionOption, value: string) => {
-    handlers.onAssert(target, toDetail(option, value))
+    const reason = readReason()
+
+    handlers.onAssert(target, toDetail(option, value, reason))
     closePanel()
     setHighlight(null)
     hovered = null
-    flash(`Added: ${option.label}`)
+    flash(reason ? `Added: ${option.label}, with reason` : `Added: ${option.label}`)
   }
 
   const buildRow = (
@@ -342,7 +363,30 @@ export function openInspector(handlers: InspectorHandlers): void {
       buildRow(null, option, pageGroup)
     }
 
-    panel.append(elementGroup, pageGroup)
+    const reason = document.createElement('div')
+    reason.className = 'reason'
+
+    const reasonInput = document.createElement('input')
+    reasonInput.placeholder = 'Failure reason (optional)'
+    reasonInput.maxLength = MAX_MESSAGE_LENGTH
+    reasonInput.setAttribute('aria-label', 'Failure reason')
+
+    const note = document.createElement('div')
+    note.className = 'note'
+    note.textContent = 'Shown by Playwright when the assertion fails'
+
+    reasonInput.addEventListener('input', () => {
+      const armed = reasonInput.value.trim().length > 0
+      reason.classList.toggle('armed', armed)
+      note.textContent = armed
+        ? 'Attached to the next assertion you add'
+        : 'Shown by Playwright when the assertion fails'
+    })
+
+    reason.append(reasonInput, note)
+    readReason = () => reasonInput.value
+
+    panel.append(elementGroup, pageGroup, reason)
     layer.append(panel)
 
     const rect = element.getBoundingClientRect()

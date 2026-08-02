@@ -159,6 +159,17 @@ const assertionSnapshot = {
     assert('count', { target: target({ strategy: 'testId', value: 'row', nth: 2, tagName: 'li', cssSelector: 'li' }) }, { expected: '3' }),
     assert('url', {}, { expected: 'https://shop.example.com/signup' }),
     assert('title', {}, { expected: 'Sign up' }),
+    assert(
+      'hidden',
+      { target: target({ strategy: 'testId', value: 'spinner', tagName: 'div', cssSelector: '.spin' }) },
+      { message: "the spinner must clear or the form looks stuck" },
+    ),
+    assert('url', {}, { expected: 'https://shop.example.com/done', message: 'signup should redirect' }),
+    assert(
+      'count',
+      { target: target({ strategy: 'testId', value: 'row', nth: 1, tagName: 'li', cssSelector: 'li' }) },
+      { expected: '2', message: "O'Brien's row should be gone" },
+    ),
   ],
 }
 
@@ -382,6 +393,12 @@ checks.push(
   ['title becomes toHaveTitle', asserted.includes("await expect(page).toHaveTitle('Sign up')")],
   ['assertions stay in recorded order', asserted.indexOf('toBeVisible') < asserted.indexOf('toHaveCount')],
   ['the assertion script parses', parses(asserted) === null],
+  // A custom failure reason, which Playwright takes as expect's second argument.
+  ['a reason becomes the expect description', asserted.includes("await expect(page.getByTestId('spinner'), 'the spinner must clear or the form looks stuck').toBeHidden()")],
+  ['page level assertions take a reason too', asserted.includes("await expect(page, 'signup should redirect').toHaveURL('/done')")],
+  ['a reason survives alongside a count', asserted.includes(".toHaveCount(2)") && asserted.includes("O\\'Brien")],
+  ['a quote in the reason is escaped', !/[^\\]'O'Brien/.test(asserted)],
+  ['assertions without a reason stay plain', asserted.includes('await expect(page.getByTestId(\'success-toast\')).toBeHidden()')],
 )
 
 show('\n')

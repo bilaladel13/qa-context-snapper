@@ -83,21 +83,26 @@ function assertion(
   const q = (input: string) => quote(input, options.quoteStyle)
   const expected = detail.expected ?? ''
 
+  // Playwright takes a description as expect's second argument and prints it
+  // instead of the generic failure, which is what a CI log needs months later.
+  const because = detail.message ? `, ${q(detail.message)}` : ''
+
   // Playwright resolves toHaveURL against baseURL exactly as goto does, so the
   // two have to agree or a relative run asserts against an absolute address.
   if (detail.kind === 'url') {
-    return [`await expect(page).toHaveURL(${q(toUrl(expected))});`]
+    return [`await expect(page${because}).toHaveURL(${q(toUrl(expected))});`]
   }
 
   if (detail.kind === 'title') {
-    return [`await expect(page).toHaveTitle(${q(expected)});`]
+    return [`await expect(page${because}).toHaveTitle(${q(expected)});`]
   }
 
   if (!step.target) {
     return []
   }
 
-  const subject = `expect(${locator(step.target, options, { indexed: detail.kind !== 'count' })})`
+  const target = locator(step.target, options, { indexed: detail.kind !== 'count' })
+  const subject = `expect(${target}${because})`
 
   switch (detail.kind) {
     case 'visible':

@@ -60,6 +60,9 @@ export interface AssertionDetail {
   kind: AssertionKind
   expected?: string
   attribute?: string
+  // Surfaced by Playwright when the assertion fails, where the default message
+  // says what broke but not why it mattered.
+  message?: string
 }
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'

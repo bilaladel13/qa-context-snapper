@@ -325,6 +325,23 @@ await expect(page.getByTestId('row')).toHaveCount(3);
 A count assertion is about the whole set, so it is the one case where the strict mode `.nth()` index
 is deliberately left off.
 
+#### Failure reasons
+
+`toBeHidden()` failing in CI six months later says what broke but not why it mattered. Playwright
+takes a description as `expect`'s second argument and prints that instead, so the panel offers an
+optional reason:
+
+```ts
+await expect(page.getByTestId('spinner'), 'the spinner must clear or the form looks stuck').toBeHidden();
+await expect(page, 'signup should redirect').toHaveURL('/done');
+```
+
+It is one field in the panel footer rather than one per row, because most assertions do not need a
+reason and a field on every row would double the panel for the exception. It attaches to the next
+assertion added and then clears, so it cannot silently carry over. Left blank, the plain `expect()`
+is generated. The reason also appears in the Markdown report and the Jira ticket, where it reads as
+the purpose of the check.
+
 ### Jira integration
 
 Connect a Jira Cloud site in settings with a site address, account email and API token. The token is

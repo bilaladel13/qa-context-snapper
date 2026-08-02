@@ -47,7 +47,9 @@ function mountDom(html) {
   return dom.window.document
 }
 
-const { suggestAssertions } = await import(pathToFileURL(resolve(OUT, 'assertions.js')).href)
+const { suggestAssertions, toDetail } = await import(
+  pathToFileURL(resolve(OUT, 'assertions.js')).href
+)
 
 const results = []
 const check = (name, passed, detail = '') => results.push({ name, passed: Boolean(passed), detail })
@@ -167,6 +169,28 @@ const kinds = (element, over) => suggestAssertions(element, target(over)).map((o
     'containers do not offer a text assertion',
     !kinds(doc.querySelector('#main')).includes('text'),
   )
+}
+
+// An optional failure reason, attached only when one was actually typed.
+{
+  const option = { kind: 'hidden', label: 'Is hidden', editable: false }
+
+  check('a blank reason is left off entirely', toDetail(option, '', '').message === undefined)
+  check('whitespace only is treated as blank', toDetail(option, '', '   \n ').message === undefined)
+  check(
+    'a typed reason is attached',
+    toDetail(option, '', '  the toast must not linger  ').message === 'the toast must not linger',
+  )
+  check(
+    'an overlong reason is clipped',
+    toDetail(option, '', 'x'.repeat(400)).message.length === 200,
+  )
+
+  const editable = { kind: 'text', label: 'Contains text', editable: true }
+  const detail = toDetail(editable, 'Saved', 'the banner confirms the save')
+
+  check('a reason coexists with an expected value', detail.expected === 'Saved')
+  check('the reason survives alongside it', detail.message === 'the banner confirms the save')
 }
 
 for (const entry of results) {
