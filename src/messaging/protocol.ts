@@ -74,7 +74,6 @@ export type DownloadRequest = {
   type: 'DOWNLOAD_FILE'
   content: string
   filename: string
-  mimeType: string
 }
 
 export interface DownloadResponseMap {

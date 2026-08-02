@@ -82,7 +82,6 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
           placeholder={PLACEHOLDERS[active]}
           filename={filename}
           extension={extension}
-          mimeType={isMarkdown ? 'text/markdown' : 'text/plain'}
           onFilenameChange={(next) => setNames((current) => ({ ...current, [active]: next }))}
         />
 

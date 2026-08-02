@@ -23,7 +23,10 @@ async function buildLib(entry, fileName) {
 }
 
 const { buildDescription, suggestSummary } = await buildLib('src/jira/adf.ts', 'adf')
-const { sanitizeFilename } = await buildLib('src/background/downloads.ts', 'downloads')
+const { sanitizeFilename, buildDownloadUrl } = await buildLib(
+  'src/background/downloads.ts',
+  'downloads',
+)
 
 const started = Date.parse('2026-07-30T10:00:00.000Z')
 
@@ -201,6 +204,25 @@ check(
   'filenames never keep a path separator',
   filenameCases.every(([input]) => !sanitizeFilename(input, 'bug-report', '.spec.ts').match(/[\\/]/)),
 )
+
+// Chrome appends .txt when the MIME type says text/plain, which turns
+// email-bug.spec.ts into email-bug.spec.ts.txt.
+const downloadUrl = buildDownloadUrl("const a = 'x';\n")
+
+check(
+  'download declares an opaque binary type',
+  downloadUrl.startsWith('data:application/octet-stream;base64,'),
+  downloadUrl.slice(0, 48),
+)
+check('download never declares a text type', !/text\/(plain|markdown)/.test(downloadUrl))
+
+const utf8Sample = 'const title = "تقرير الخطأ";\n// naïve — em dash…\n'
+const decoded = Buffer.from(
+  buildDownloadUrl(utf8Sample).split(',')[1],
+  'base64',
+).toString('utf8')
+
+check('payload round trips as utf-8', decoded === utf8Sample, JSON.stringify(decoded))
 
 for (const entry of results) {
   process.stdout.write(`${entry.passed ? 'ok  ' : 'FAIL'}  ${entry.name}\n`)

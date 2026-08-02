@@ -16,7 +16,15 @@ export function sanitizeFilename(input: string, fallback: string, extension: str
   return name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`
 }
 
-function toDataUrl(content: string, mimeType: string): string {
+// Chrome rewrites a download's extension to match its MIME type. Declaring
+// text/plain makes it append .txt, so email-bug.spec.ts is saved as
+// email-bug.spec.ts.txt and the Save As dialog offers only Text Document.
+// An opaque binary type carries no extension expectation, so the requested
+// name survives exactly as typed. This is why the type is fixed here rather
+// than passed in: no caller can reintroduce the bug.
+const DOWNLOAD_MIME_TYPE = 'application/octet-stream'
+
+export function buildDownloadUrl(content: string): string {
   const bytes = new TextEncoder().encode(content)
   let binary = ''
 
@@ -24,13 +32,12 @@ function toDataUrl(content: string, mimeType: string): string {
     binary += String.fromCharCode(byte)
   }
 
-  return `data:${mimeType};charset=utf-8;base64,${btoa(binary)}`
+  return `data:${DOWNLOAD_MIME_TYPE};base64,${btoa(binary)}`
 }
 
 export interface DownloadInput {
   content: string
   filename: string
-  mimeType: string
 }
 
 // Runs in the worker rather than the popup on purpose. The Save As dialog takes
@@ -42,7 +49,7 @@ export async function startDownload(
 ): Promise<Result<{ downloadId: number | null; cancelled: boolean }>> {
   try {
     const downloadId = await chrome.downloads.download({
-      url: toDataUrl(input.content, input.mimeType),
+      url: buildDownloadUrl(input.content),
       filename: input.filename,
       saveAs: true,
     })

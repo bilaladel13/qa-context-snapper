@@ -302,6 +302,12 @@ content is handed to the worker, which turns it into a data URL and calls
 `chrome.downloads.download({ saveAs: true })`. That opens the native dialog so the script can be
 routed straight into a project's `tests/` directory instead of Downloads.
 
+The payload is declared as `application/octet-stream`. Chrome rewrites a download's extension to match
+its MIME type, so `text/plain` appends `.txt` and saves `email-bug.spec.ts` as
+`email-bug.spec.ts.txt`, with the dialog offering only Text Document. An opaque binary type carries
+no extension expectation, so the requested name survives. The type is fixed inside the download layer
+rather than passed in by callers, so it cannot be set back to a text type by accident.
+
 Filenames are editable per tab and sanitized before use: Chrome rejects absolute paths, traversal and
 reserved characters, so `../../etc/passwd` becomes `passwd.spec.ts` and the extension is reapplied if
 it was removed. Dismissing the dialog is treated as a choice, not an error.

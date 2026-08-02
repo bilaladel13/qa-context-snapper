@@ -9,7 +9,6 @@ interface CodeBlockProps {
   placeholder: string
   filename: string
   extension: string
-  mimeType: string
   onFilenameChange: (filename: string) => void
 }
 
@@ -18,7 +17,6 @@ export function CodeBlock({
   placeholder,
   filename,
   extension,
-  mimeType,
   onFilenameChange,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
@@ -58,12 +56,7 @@ export function CodeBlock({
   const handleSave = async () => {
     setSaving(true)
 
-    const response = await requestDownload({
-      type: 'DOWNLOAD_FILE',
-      content,
-      filename,
-      mimeType,
-    })
+    const response = await requestDownload({ type: 'DOWNLOAD_FILE', content, filename })
 
     setSaving(false)
     setStatus(response.ok ? (response.data.cancelled ? null : 'Saved') : response.error)

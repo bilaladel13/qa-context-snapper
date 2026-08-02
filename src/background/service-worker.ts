@@ -290,11 +290,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isDownloadRequest(message)) {
     return respond(
-      startDownload({
-        content: message.content,
-        filename: message.filename,
-        mimeType: message.mimeType,
-      }),
+      startDownload({ content: message.content, filename: message.filename }),
       sendResponse,
     )
   }
