@@ -35,11 +35,13 @@ Press stop and three artefacts exist at once, from one recording:
 | **Markdown bug report** | Environment table, numbered reproduction steps, console output |
 | **Playwright spec** | Runnable `.spec.ts` with resilient locators and real assertions |
 | **Jira ticket** | Native Atlassian Document Format, with project and assignee pickers |
+| **Screenshot** | Captured the instant you stop, attached to the ticket automatically |
 
 ## Key features
 
 - **Smart Locator Ladder** — resolves ambiguous elements by *identity*, not position. Details below.
 - **Assertion inspector** — hover, click, and pick what to assert. Values are read live off the page.
+- **Visual context** — a screenshot taken the moment you stop, previewed before it is attached.
 - **Console capture that actually works** — including errors thrown by the page's own scripts.
 - **Survives navigation** — a recording continues across full page loads and logins.
 - **Relative navigation** — emits `page.goto('/checkout')` so tests follow your `baseURL`.

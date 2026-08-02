@@ -130,6 +130,16 @@ export interface GeneratedReport {
   playwrightScript: string
 }
 
+// Describes the capture without carrying it. The image itself lives under its
+// own storage key, because RecorderState is broadcast on every counter tick and
+// a few hundred kilobytes of base64 has no business riding along.
+export interface ScreenshotMeta {
+  width: number
+  height: number
+  bytes: number
+  capturedAt: string
+}
+
 export type RecorderStatus = 'idle' | 'recording' | 'result'
 
 export interface RecorderState {
@@ -143,5 +153,7 @@ export interface RecorderState {
   interactionCount: number
   consoleErrorCount: number
   snapshot: ContextSnapshot | null
+  screenshot: ScreenshotMeta | null
+  screenshotError: string | null
   report: GeneratedReport | null
 }

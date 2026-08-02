@@ -21,6 +21,7 @@ import type {
 import { generateReport } from '@/generator'
 import { loadSettings, onSettingsChanged } from '@/settings/store'
 import type { ContextSnapshot, EnvironmentSnapshot } from '@/types'
+import { captureTab } from './screenshot'
 import {
   appendConsoleError,
   appendInteraction,
@@ -28,8 +29,10 @@ import {
   clearAll,
   getBuffer,
   getState,
+  readScreenshot,
   setEnvironment,
   updateState,
+  writeScreenshot,
 } from './store'
 import {
   blockedReason,
@@ -119,6 +122,13 @@ async function stopRecording(): Promise<PopupResponse> {
     await sendToTab(state.tabId, { type: 'CONTENT_STOP_RECORDING', sessionId: state.sessionId })
   }
 
+  // Taken now rather than when a ticket is filed. By then the tester may have
+  // navigated on, dismissed the toast or cleared the error, and the visual
+  // state worth capturing is the one at the moment they stopped.
+  const capture = state.tabId === null ? null : await captureTab(state.tabId)
+
+  await writeScreenshot(capture?.ok ? capture.data.dataUrl : null)
+
   const buffer = await getBuffer()
   const stoppedAt = Date.now()
 
@@ -142,6 +152,8 @@ async function stopRecording(): Promise<PopupResponse> {
       status: 'result',
       stoppedAt,
       snapshot,
+      screenshot: capture?.ok ? capture.data.meta : null,
+      screenshotError: capture && !capture.ok ? capture.error : null,
       report: generateReport(snapshot, await loadSettings()),
       interactionCount: snapshot.interactions.length,
       consoleErrorCount: snapshot.consoleErrors.length,
@@ -229,7 +241,7 @@ async function toggleAssertionMode(): Promise<Result<{ assertionMode: boolean }>
     : fail('The recorded page did not respond. Reload it and start again.')
 }
 
-function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
+async function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
   switch (query.type) {
     case 'GET_ACTIVE_TAB':
       return describeActiveTab()
@@ -237,6 +249,8 @@ function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
       return focusRecordedTab()
     case 'TOGGLE_ASSERTION_MODE':
       return toggleAssertionMode()
+    case 'GET_SCREENSHOT':
+      return ok({ dataUrl: await readScreenshot() })
   }
 }
 

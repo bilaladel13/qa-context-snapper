@@ -71,6 +71,8 @@ export function Popup() {
           jira={jira}
           settings={settings}
           snapshot={state?.snapshot ?? null}
+          screenshot={state?.screenshot ?? null}
+          screenshotError={state?.screenshotError ?? null}
           onOpenSettings={() => setRoute('settings')}
         />
       ) : state === null ? (

@@ -370,6 +370,35 @@ assignability is a project level permission. Many projects leave assignee off th
 which rejects the entire issue; when that happens the ticket is retried unassigned and the result
 screen says so, since losing the assignee beats losing the report.
 
+#### Visual context
+
+The screenshot is taken when the recording **stops**, not when a ticket is filed. By the time the
+reporter has written up actual and expected behaviour they may have navigated on, dismissed the
+toast or cleared the error, and the visual state worth keeping is the one at the moment they
+stopped.
+
+`captureVisibleTab` photographs whatever a window is currently showing rather than a tab of our
+choosing, so the recorded tab is checked for `active` first. Stopping from the keyboard while
+looking at a different tab would otherwise attach a screenshot of the wrong page, which is worse
+than attaching none.
+
+Captures are JPEG rather than PNG: a page is mostly flat colour and large text, which JPEG carries
+at a fraction of the size while staying legible. The image is bounded on width and on bytes, and
+re-encoded through `OffscreenCanvas` when it exceeds either, because it has to survive both session
+storage and a message port.
+
+That image lives under its own storage key, never inside `RecorderState`. State is broadcast on
+every counter tick during a recording, and a few hundred kilobytes of base64 has no business riding
+along. The popup fetches it once, on demand, to render the preview.
+
+Uploading is necessarily a second request: Jira only accepts an attachment against an issue that
+already exists. Two details fail quietly when wrong. `X-Atlassian-Token: no-check` is required or
+the post is refused as cross site, and `Content-Type` must be left unset so `FormData` can generate
+its own multipart boundary. `npm run verify:jira` asserts both against a stubbed transport.
+
+If the upload fails the issue still exists, so that is reported as a warning on a successful create
+rather than an error. Reporting failure would send the reporter back to file the whole thing twice.
+
 #### Saving to a project directory
 
 The Save As dialog takes focus, which closes the popup, and a `blob:` URL owned by a closed popup is

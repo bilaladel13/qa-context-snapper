@@ -54,7 +54,11 @@ async function request<T>(
       headers: {
         Authorization: `Basic ${basicAuth(credentials.email, credentials.token)}`,
         Accept: 'application/json',
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        // FormData must set its own Content-Type so the multipart boundary is
+        // generated; declaring JSON here makes Jira reject the upload.
+        ...(init.body && !(init.body instanceof FormData)
+          ? { 'Content-Type': 'application/json' }
+          : {}),
         ...init.headers,
       },
     })
@@ -184,6 +188,52 @@ export async function listAssignableUsers(
     }))
 
   return ok(users)
+}
+
+interface AttachmentResponse {
+  id?: string
+  filename?: string
+}
+
+// Jira only accepts an attachment against an issue that already exists, so this
+// is always the second half of a create.
+export async function uploadAttachment(
+  credentials: JiraCredentials,
+  issueKey: string,
+  file: { name: string; dataUrl: string },
+): Promise<Result<{ id: string; filename: string }>> {
+  let body: FormData
+
+  try {
+    const blob = await (await fetch(file.dataUrl)).blob()
+
+    body = new FormData()
+    body.append('file', blob, file.name)
+  } catch {
+    return fail('The screenshot could not be prepared for upload.')
+  }
+
+  const response = await request<AttachmentResponse[]>(
+    credentials,
+    `/rest/api/3/issue/${encodeURIComponent(issueKey)}/attachments`,
+    {
+      method: 'POST',
+      body,
+      // Jira refuses cross site form posts without this, returning 403 with no
+      // useful message. It is required even with Basic auth.
+      headers: { 'X-Atlassian-Token': 'no-check' },
+    },
+  )
+
+  if (!response.ok) {
+    return response
+  }
+
+  const attachment = response.data?.[0]
+
+  return attachment?.id
+    ? ok({ id: attachment.id, filename: attachment.filename ?? file.name })
+    : fail('Jira accepted the upload but returned no attachment.')
 }
 
 export interface CreateIssueInput {

@@ -112,6 +112,7 @@ interface DescriptionOptions {
   includeConsoleErrors?: boolean
   actual?: string
   expected?: string
+  hasScreenshot?: boolean
 }
 
 export function buildDescription(
@@ -127,7 +128,11 @@ export function buildDescription(
       attrs: { panelType: 'info' },
       content: [
         paragraph(
-          `Captured with QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}.`,
+          `Captured with QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}.${
+            options.hasScreenshot
+              ? ' A screenshot of the page as the recording stopped is attached.'
+              : ''
+          }`,
         ),
       ],
     },

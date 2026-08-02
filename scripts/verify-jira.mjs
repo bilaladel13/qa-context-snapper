@@ -34,6 +34,8 @@ const { sanitizeFilename, buildDownloadUrl, mimeForFilename } = await buildLib(
   'downloads',
 )
 
+const { uploadAttachment } = await buildLib('src/jira/api.ts', 'api')
+
 const started = Date.parse('2026-07-30T10:00:00.000Z')
 
 const snapshot = {
@@ -254,6 +256,57 @@ const decoded = Buffer.from(
 ).toString('utf8')
 
 check('payload round trips as utf-8', decoded === utf8Sample, JSON.stringify(decoded))
+
+// The attachment upload has two contract details that fail quietly when wrong:
+// Jira rejects the post without the XSRF header, and declaring a Content-Type
+// destroys the multipart boundary.
+{
+  const calls = []
+  const realFetch = globalThis.fetch
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (typeof url === 'string' && url.startsWith('data:')) {
+      return { blob: async () => new Blob([Uint8Array.from([1, 2, 3])], { type: 'image/jpeg' }) }
+    }
+
+    calls.push({ url, init })
+
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ id: '10101', filename: 'shot.jpg' }]),
+    }
+  }
+
+  const credentials = { domain: 'https://example.atlassian.net', email: 'a@b.c', token: 't' }
+  const result = await uploadAttachment(credentials, 'QA-7', {
+    name: 'shot.jpg',
+    dataUrl: 'data:image/jpeg;base64,AQID',
+  })
+
+  globalThis.fetch = realFetch
+
+  const call = calls[0]
+  const headers = call?.init?.headers ?? {}
+  const headerNames = Object.keys(headers).map((name) => name.toLowerCase())
+
+  check('the upload targets the attachments endpoint', call?.url === 'https://example.atlassian.net/rest/api/3/issue/QA-7/attachments')
+  check('the upload is a post', call?.init?.method === 'POST')
+  check('the xsrf header is sent', headers['X-Atlassian-Token'] === 'no-check')
+  check('content type is left to FormData', !headerNames.includes('content-type'), headerNames.join(', '))
+  check('the body is multipart form data', call?.init?.body instanceof FormData)
+  check('the file field is named file', call?.init?.body?.get('file') instanceof Blob)
+  check('the attachment id is returned', result.ok && result.data.id === '10101')
+}
+
+// The description mentions the attachment only when one is really going up.
+{
+  const withShot = JSON.stringify(buildDescription(snapshot, { playwrightScript: null, hasScreenshot: true }))
+  const without = JSON.stringify(buildDescription(snapshot, { playwrightScript: null }))
+
+  check('the description notes an attached screenshot', withShot.includes('screenshot of the page'))
+  check('and stays silent when there is none', !without.includes('screenshot of the page'))
+}
 
 for (const entry of results) {
   process.stdout.write(`${entry.passed ? 'ok  ' : 'FAIL'}  ${entry.name}\n`)

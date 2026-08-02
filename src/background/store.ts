@@ -8,6 +8,7 @@ import type {
 
 const STATE_KEY = 'recorderState'
 const BUFFER_KEY = 'recorderBuffer'
+const SCREENSHOT_KEY = 'recorderScreenshot'
 
 const MAX_INTERACTIONS = 1000
 const MAX_CONSOLE_ERRORS = 300
@@ -30,6 +31,8 @@ export const INITIAL_STATE: RecorderState = {
   interactionCount: 0,
   consoleErrorCount: 0,
   snapshot: null,
+  screenshot: null,
+  screenshotError: null,
   report: null,
 }
 
@@ -94,6 +97,7 @@ export function beginSession(
 
     const next: RecorderState = { ...INITIAL_STATE, ...patch, sessionId }
 
+    await chrome.storage.session.remove(SCREENSHOT_KEY)
     await chrome.storage.session.set({ [BUFFER_KEY]: buffer, [STATE_KEY]: next })
     broadcast(next)
 
@@ -101,9 +105,29 @@ export function beginSession(
   })
 }
 
+// Kept apart from RecorderState so the image is never broadcast, and read only
+// when something actually needs the pixels.
+export function readScreenshot(): Promise<string | null> {
+  return withLock(async () => {
+    const stored = await chrome.storage.session.get(SCREENSHOT_KEY)
+    return (stored[SCREENSHOT_KEY] as string | undefined) ?? null
+  })
+}
+
+export function writeScreenshot(dataUrl: string | null): Promise<void> {
+  return withLock(async () => {
+    if (dataUrl === null) {
+      await chrome.storage.session.remove(SCREENSHOT_KEY)
+      return
+    }
+
+    await chrome.storage.session.set({ [SCREENSHOT_KEY]: dataUrl })
+  })
+}
+
 export function clearAll(): Promise<RecorderState> {
   return withLock(async () => {
-    await chrome.storage.session.remove(BUFFER_KEY)
+    await chrome.storage.session.remove([BUFFER_KEY, SCREENSHOT_KEY])
     await chrome.storage.session.set({ [STATE_KEY]: INITIAL_STATE })
     broadcast(INITIAL_STATE)
     return INITIAL_STATE

@@ -41,11 +41,13 @@ export type PopupQuery =
   | { type: 'GET_ACTIVE_TAB' }
   | { type: 'FOCUS_RECORDED_TAB' }
   | { type: 'TOGGLE_ASSERTION_MODE' }
+  | { type: 'GET_SCREENSHOT' }
 
 export interface PopupQueryResponseMap {
   GET_ACTIVE_TAB: ActiveTabInfo
   FOCUS_RECORDED_TAB: { focused: boolean }
   TOGGLE_ASSERTION_MODE: { assertionMode: boolean }
+  GET_SCREENSHOT: { dataUrl: string | null }
 }
 
 export type JiraRequest =
@@ -160,6 +162,7 @@ const POPUP_QUERY_TYPES = new Set([
   'GET_ACTIVE_TAB',
   'FOCUS_RECORDED_TAB',
   'TOGGLE_ASSERTION_MODE',
+  'GET_SCREENSHOT',
 ])
 
 export function isPopupRequest(value: unknown): value is PopupRequest {

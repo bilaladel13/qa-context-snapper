@@ -10,7 +10,9 @@ import { CheckIcon, ExternalIcon, ResetIcon } from '@/components/icons'
 import { suggestSummary } from '@/jira/adf'
 import type { JiraController } from '@/popup/useJira'
 import type { SettingsController } from '@/popup/useSettings'
-import type { ContextSnapshot } from '@/types'
+import { ScreenshotField } from '@/components/ScreenshotField'
+import { useScreenshot } from '@/popup/useScreenshot'
+import type { ContextSnapshot, ScreenshotMeta } from '@/types'
 
 const SUMMARY_LIMIT = 255
 const UNASSIGNED = ''
@@ -37,10 +39,19 @@ interface JiraViewProps {
   jira: JiraController
   settings: SettingsController
   snapshot: ContextSnapshot | null
+  screenshot: ScreenshotMeta | null
+  screenshotError: string | null
   onOpenSettings: () => void
 }
 
-export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewProps) {
+export function JiraView({
+  jira,
+  settings,
+  snapshot,
+  screenshot,
+  screenshotError,
+  onOpenSettings,
+}: JiraViewProps) {
   const { projects, assignees, connection, busy, error, created } = jira
   const selection = settings.settings.jira
 
@@ -50,6 +61,8 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
   const [projectKey, setProjectKey] = useState(selection.projectKey)
   const [issueTypeId, setIssueTypeId] = useState(selection.issueTypeId)
   const [assigneeAccountId, setAssigneeAccountId] = useState(UNASSIGNED)
+  const [attachScreenshot, setAttachScreenshot] = useState(true)
+  const screenshotData = useScreenshot(screenshot !== null)
 
   useEffect(() => {
     if (snapshot) {
@@ -109,6 +122,7 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
       assigneeAccountId: assigneeAccountId || null,
       actual,
       expected,
+      attachScreenshot: attachScreenshot && screenshot !== null,
     })
 
     if (success) {
@@ -220,6 +234,16 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
               placeholder="The total should fall back to 0.00 when the basket is empty."
             />
           </Field>
+        </Group>
+
+        <Group title="Visual context">
+          <ScreenshotField
+            meta={screenshot}
+            error={screenshotError}
+            dataUrl={screenshotData}
+            attach={attachScreenshot}
+            onChange={setAttachScreenshot}
+          />
         </Group>
 
         <Group title="Destination">

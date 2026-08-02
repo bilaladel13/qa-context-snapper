@@ -1,12 +1,18 @@
 import { generatePlaywrightScript } from '@/generator'
 import { buildDescription } from '@/jira/adf'
-import { createIssue, listAssignableUsers, listProjects, verifyCredentials } from '@/jira/api'
+import {
+  createIssue,
+  listAssignableUsers,
+  listProjects,
+  uploadAttachment,
+  verifyCredentials,
+} from '@/jira/api'
 import { clearCredentials, normalizeDomain, readCredentials, writeCredentials } from '@/jira/store'
 import type { JiraConnection } from '@/jira/types'
 import { fail, ok } from '@/messaging/protocol'
 import type { JiraRequest, Result } from '@/messaging/protocol'
 import { loadSettings } from '@/settings/store'
-import { getState } from './store'
+import { getState, readScreenshot } from './store'
 
 const ACCOUNT_NAME_KEY = 'jiraAccountName'
 
@@ -150,7 +156,9 @@ async function create(request: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Pro
     ? generatePlaywrightScript(state.snapshot, settings.playwright)
     : null
 
-  return createIssue(credentials, {
+  const screenshot = draft.attachScreenshot ? await readScreenshot() : null
+
+  const created = await createIssue(credentials, {
     projectKey: draft.projectKey,
     issueTypeId: draft.issueTypeId,
     assigneeAccountId: draft.assigneeAccountId,
@@ -160,8 +168,38 @@ async function create(request: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Pro
       includeConsoleErrors: settings.jira.includeConsoleErrors,
       actual: draft.actual,
       expected: draft.expected,
+      hasScreenshot: screenshot !== null,
     }),
   })
+
+  if (!created.ok || !screenshot) {
+    return created
+  }
+
+  const upload = await uploadAttachment(credentials, created.data.key, {
+    name: screenshotName(state.snapshot.environment.pageTitle, created.data.key),
+    dataUrl: screenshot,
+  })
+
+  // The issue exists either way. Reporting a failure here would send the
+  // reporter back to file it a second time, so a lost screenshot is a warning
+  // on a successful create, not an error.
+  return upload.ok
+    ? created
+    : ok({
+        ...created.data,
+        warning: `The ticket was created, but the screenshot could not be attached. ${upload.error}`,
+      })
+}
+
+function screenshotName(pageTitle: string, issueKey: string): string {
+  const slug = pageTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+
+  return `${issueKey}-${slug || 'screenshot'}.jpg`
 }
 
 export function handleJiraRequest(request: JiraRequest): Promise<Result<unknown>> {

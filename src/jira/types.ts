@@ -45,4 +45,5 @@ export interface JiraDraft {
   assigneeAccountId: string | null
   actual: string
   expected: string
+  attachScreenshot: boolean
 }
