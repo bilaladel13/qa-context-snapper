@@ -8,6 +8,7 @@ interface CodeBlockProps {
   content: string
   placeholder: string
   filename: string
+  filenameLabel: string
   extension: string
   onFilenameChange: (filename: string) => void
 }
@@ -16,6 +17,7 @@ export function CodeBlock({
   content,
   placeholder,
   filename,
+  filenameLabel,
   extension,
   onFilenameChange,
 }: CodeBlockProps) {
@@ -68,25 +70,35 @@ export function CodeBlock({
         {isEmpty ? <span className="text-ink-subtle">{placeholder}</span> : content}
       </pre>
 
-      <div className="flex shrink-0 items-center gap-2">
-        <TextInput
-          mono
-          value={filename}
-          disabled={isEmpty}
-          aria-label="File name"
-          onChange={(event) => onFilenameChange(event.target.value)}
-          placeholder={`name${extension}`}
-          className="flex-1 py-1.5 text-[11px]"
-        />
-        <Button
-          variant="ghost"
-          disabled={isEmpty || saving}
-          onClick={() => void handleSave()}
-          className="shrink-0 px-3 py-1.5 text-xs"
-          icon={<DownloadIcon className="size-3.5" />}
+      {/* Labelled because the two tabs are otherwise indistinguishable at a
+          glance, which makes it easy to save the report thinking it is code. */}
+      <div className="shrink-0 space-y-1">
+        <label
+          htmlFor="download-filename"
+          className="block text-[10px] font-semibold uppercase tracking-wider text-ink-subtle"
         >
-          {saving ? 'Saving' : 'Save as'}
-        </Button>
+          {filenameLabel}
+        </label>
+        <div className="flex items-center gap-2">
+          <TextInput
+            mono
+            id="download-filename"
+            value={filename}
+            disabled={isEmpty}
+            onChange={(event) => onFilenameChange(event.target.value)}
+            placeholder={`name${extension}`}
+            className="flex-1 py-1.5 text-[11px]"
+          />
+          <Button
+            variant="ghost"
+            disabled={isEmpty || saving}
+            onClick={() => void handleSave()}
+            className="shrink-0 px-3 py-1.5 text-xs"
+            icon={<DownloadIcon className="size-3.5" />}
+          >
+            {saving ? 'Saving' : 'Save as'}
+          </Button>
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">

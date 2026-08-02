@@ -15,14 +15,9 @@ const PLACEHOLDERS: Record<Tab, string> = {
   playwright: 'No Playwright script was generated for this recording.',
 }
 
-function slugify(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-
-  return slug || 'recording'
+const TAB_FILES: Record<Tab, { prefix: string; extension: string; label: string }> = {
+  markdown: { prefix: 'bug-report', extension: '.md', label: 'Report filename' },
+  playwright: { prefix: 'bug-test', extension: '.spec.ts', label: 'Script filename' },
 }
 
 interface ResultViewProps {
@@ -35,11 +30,10 @@ interface ResultViewProps {
 export function ResultView({ state, pending, onReset, onCreateTicket }: ResultViewProps) {
   const [active, setActive] = useState<Tab>('markdown')
 
-  const baseName = useMemo(() => {
-    const title = state.snapshot?.environment.pageTitle || state.tabTitle || 'recording'
-    const date = new Date(state.stoppedAt ?? Date.now()).toISOString().slice(0, 10)
-    return `${slugify(title)}-${date}`
-  }, [state.snapshot, state.tabTitle, state.stoppedAt])
+  const date = useMemo(
+    () => new Date(state.stoppedAt ?? Date.now()).toISOString().slice(0, 10),
+    [state.stoppedAt],
+  )
 
   // Each tab keeps its own name so switching back and forth does not overwrite
   // a filename the tester already adjusted.
@@ -49,8 +43,8 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
   })
 
   const isMarkdown = active === 'markdown'
-  const extension = isMarkdown ? '.md' : '.spec.ts'
-  const filename = names[active] ?? `${baseName}${extension}`
+  const file = TAB_FILES[active]
+  const filename = names[active] ?? `${file.prefix}-${date}${file.extension}`
 
   const content = isMarkdown
     ? (state.report?.markdown ?? '')
@@ -81,7 +75,8 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
           content={content}
           placeholder={PLACEHOLDERS[active]}
           filename={filename}
-          extension={extension}
+          filenameLabel={file.label}
+          extension={file.extension}
           onFilenameChange={(next) => setNames((current) => ({ ...current, [active]: next }))}
         />
 
