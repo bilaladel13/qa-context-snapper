@@ -129,6 +129,39 @@ const localhostSnapshot = {
   ],
 }
 
+const assert = (kind, over = {}, extra = {}) => ({
+  id: `a-${kind}`,
+  type: 'assertion',
+  target: over.target ?? null,
+  assertion: { kind, ...extra },
+  url: 'x',
+  timestamp: at(0),
+})
+
+// A silent bug: an invalid email is accepted, nothing is logged, and only an
+// assertion can make the generated test fail.
+const assertionSnapshot = {
+  sessionId: 'assertions',
+  startedAt: started,
+  stoppedAt: at(30_000),
+  environment: { ...snapshot.environment, pageUrl: 'https://shop.example.com/signup' },
+  consoleErrors: [],
+  interactions: [
+    { id: 'n1', type: 'navigation', target: null, value: 'https://shop.example.com/signup', url: 'x', timestamp: at(0) },
+    { id: 'i1', type: 'input', target: target({ strategy: 'label', value: 'Email', tagName: 'input', cssSelector: '#email' }), value: 'not-an-email', url: 'x', timestamp: at(1000) },
+    assert('visible', { target: target({ strategy: 'role', value: 'alert', accessibleName: 'Enter a valid email', tagName: 'p', cssSelector: '.err' }) }),
+    assert('exactText', { target: target({ strategy: 'testId', value: 'error-text', tagName: 'p', cssSelector: '.err' }) }, { expected: 'Enter a valid email address' }),
+    assert('disabled', { target: target({ strategy: 'role', value: 'button', accessibleName: 'Continue', tagName: 'button', cssSelector: '#go' }) }),
+    assert('unchecked', { target: target({ strategy: 'label', value: 'Newsletter', tagName: 'input', cssSelector: '#news' }) }),
+    assert('value', { target: target({ strategy: 'label', value: 'Email', tagName: 'input', cssSelector: '#email' }) }, { expected: 'not-an-email' }),
+    assert('attribute', { target: target({ strategy: 'label', value: 'Email', tagName: 'input', cssSelector: '#email' }) }, { attribute: 'aria-invalid', expected: 'true' }),
+    assert('hidden', { target: target({ strategy: 'testId', value: 'success-toast', tagName: 'div', cssSelector: '.toast' }) }),
+    assert('count', { target: target({ strategy: 'testId', value: 'row', nth: 2, tagName: 'li', cssSelector: 'li' }) }, { expected: '3' }),
+    assert('url', {}, { expected: 'https://shop.example.com/signup' }),
+    assert('title', {}, { expected: 'Sign up' }),
+  ],
+}
+
 // The pre Phase 5 shape stored candidates as plain strings.
 const legacySnapshot = {
   ...localhostSnapshot,
@@ -220,6 +253,28 @@ const checks = [
   ['legacy string candidates still resolve', legacy.includes(".getByTestId('delete-btn')")],
   ['every resiliency script parses', [relative, absolute, forcedCss, legacy].every((s) => parses(s) === null)],
 ]
+
+const asserted = generatePlaywrightScript(assertionSnapshot, DEFAULTS)
+
+show('\n--- assertions ---\n')
+show(asserted + '\n')
+
+checks.push(
+  ['visible becomes toBeVisible', asserted.includes(".getByRole('alert', { name: 'Enter a valid email' })).toBeVisible()")],
+  ['exact text becomes toHaveText', asserted.includes(".getByTestId('error-text')).toHaveText('Enter a valid email address')")],
+  ['disabled becomes toBeDisabled', asserted.includes('.toBeDisabled()')],
+  ['unchecked becomes not.toBeChecked', asserted.includes('.not.toBeChecked()')],
+  ['value becomes toHaveValue', asserted.includes(".toHaveValue('not-an-email')")],
+  ['attribute becomes toHaveAttribute', asserted.includes(".toHaveAttribute('aria-invalid', 'true')")],
+  ['hidden becomes toBeHidden', asserted.includes('.toBeHidden()')],
+  ['count becomes toHaveCount', asserted.includes('.toHaveCount(3)')],
+  // A count assertion is about the whole set, so indexing it would always fail.
+  ['count never carries an nth', !/nth\(2\)\)\.toHaveCount/.test(asserted)],
+  ['url becomes toHaveURL', asserted.includes("await expect(page).toHaveURL('/signup')")],
+  ['title becomes toHaveTitle', asserted.includes("await expect(page).toHaveTitle('Sign up')")],
+  ['assertions stay in recorded order', asserted.indexOf('toBeVisible') < asserted.indexOf('toHaveCount')],
+  ['the assertion script parses', parses(asserted) === null],
+)
 
 show('\n')
 

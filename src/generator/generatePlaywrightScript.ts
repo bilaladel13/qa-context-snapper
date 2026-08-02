@@ -3,7 +3,11 @@ import type { PlaywrightSettings } from '@/settings/schema'
 import type { ContextSnapshot, ElementTarget, InteractionEvent } from '@/types'
 import { originOf, parseViewport, quote, relativizeUrl, resolveStrategy, trimEllipsis } from './shared'
 
-function locator(target: ElementTarget, options: PlaywrightSettings): string {
+function locator(
+  target: ElementTarget,
+  options: PlaywrightSettings,
+  { indexed = true }: { indexed?: boolean } = {},
+): string {
   const { strategy, value, nth } = resolveStrategy(target, options.selectorPreference)
   const q = (input: string) => quote(input, options.quoteStyle)
 
@@ -35,8 +39,69 @@ function locator(target: ElementTarget, options: PlaywrightSettings): string {
   }
 
   // Without this the locator resolves to several elements and Playwright fails
-  // the step under strict mode instead of acting on the recorded one.
-  return nth === undefined ? base : `${base}.nth(${nth})`
+  // the step under strict mode instead of acting on the recorded one. A count
+  // assertion is the exception: it is about the whole set.
+  return nth === undefined || !indexed ? base : `${base}.nth(${nth})`
+}
+
+function assertion(
+  step: InteractionEvent,
+  options: PlaywrightSettings,
+  toUrl: (url: string) => string,
+): string[] {
+  const detail = step.assertion
+
+  if (!detail) {
+    return []
+  }
+
+  const q = (input: string) => quote(input, options.quoteStyle)
+  const expected = detail.expected ?? ''
+
+  // Playwright resolves toHaveURL against baseURL exactly as goto does, so the
+  // two have to agree or a relative run asserts against an absolute address.
+  if (detail.kind === 'url') {
+    return [`await expect(page).toHaveURL(${q(toUrl(expected))});`]
+  }
+
+  if (detail.kind === 'title') {
+    return [`await expect(page).toHaveTitle(${q(expected)});`]
+  }
+
+  if (!step.target) {
+    return []
+  }
+
+  const subject = `expect(${locator(step.target, options, { indexed: detail.kind !== 'count' })})`
+
+  switch (detail.kind) {
+    case 'visible':
+      return [`await ${subject}.toBeVisible();`]
+    case 'hidden':
+      return [`await ${subject}.toBeHidden();`]
+    case 'text':
+      return [`await ${subject}.toContainText(${q(trimEllipsis(expected))});`]
+    case 'exactText':
+      return [`await ${subject}.toHaveText(${q(trimEllipsis(expected))});`]
+    case 'value':
+      return [`await ${subject}.toHaveValue(${q(expected)});`]
+    case 'enabled':
+      return [`await ${subject}.toBeEnabled();`]
+    case 'disabled':
+      return [`await ${subject}.toBeDisabled();`]
+    case 'checked':
+      return [`await ${subject}.toBeChecked();`]
+    case 'unchecked':
+      return [`await ${subject}.not.toBeChecked();`]
+    case 'count':
+      return [`await ${subject}.toHaveCount(${Number(expected) || 0});`]
+    case 'attribute':
+      return [
+        `await ${subject}.toHaveAttribute(${q(detail.attribute ?? '')}, ${q(expected)});`,
+      ]
+    default:
+      return []
+  }
 }
 
 function statement(
@@ -45,6 +110,10 @@ function statement(
   toUrl: (url: string) => string,
 ): string[] {
   const q = (input: string) => quote(input, options.quoteStyle)
+
+  if (step.type === 'assertion') {
+    return assertion(step, options, toUrl)
+  }
 
   if (step.type === 'navigation') {
     return [`await page.goto(${q(toUrl(step.value ?? ''))});`]

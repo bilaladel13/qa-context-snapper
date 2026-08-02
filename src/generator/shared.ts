@@ -99,8 +99,52 @@ export function describeTarget(target: ElementTarget | null): string {
   }
 }
 
+export function describeAssertion(step: InteractionEvent): string {
+  const detail = step.assertion
+
+  if (!detail) {
+    return 'Check the page'
+  }
+
+  const subject = describeTarget(step.target)
+  const expected = detail.expected ?? ''
+
+  switch (detail.kind) {
+    case 'visible':
+      return `Check that ${subject} is visible`
+    case 'hidden':
+      return `Check that ${subject} is not visible`
+    case 'text':
+      return `Check that ${subject} contains "${expected}"`
+    case 'exactText':
+      return `Check that ${subject} reads exactly "${expected}"`
+    case 'value':
+      return `Check that ${subject} has the value "${expected}"`
+    case 'enabled':
+      return `Check that ${subject} is enabled`
+    case 'disabled':
+      return `Check that ${subject} is disabled`
+    case 'checked':
+      return `Check that ${subject} is checked`
+    case 'unchecked':
+      return `Check that ${subject} is not checked`
+    case 'count':
+      return `Check that ${subject} matches ${expected} elements`
+    case 'attribute':
+      return `Check that ${subject} has ${detail.attribute} set to "${expected}"`
+    case 'url':
+      return `Check that the page URL is ${expected}`
+    case 'title':
+      return `Check that the page title is "${expected}"`
+    default:
+      return `Check ${subject}`
+  }
+}
+
 export function describeStep(step: InteractionEvent): string {
   switch (step.type) {
+    case 'assertion':
+      return describeAssertion(step)
     case 'navigation':
       return `Navigate to ${step.value ?? 'the page'}`
     case 'click':
