@@ -283,6 +283,29 @@ Requests run in the service worker, not the popup. The popup is destroyed whenev
 which would abort an in-flight request, and keeping the call in the worker means the token never
 enters a page adjacent context.
 
+Before filing, the ticket screen collects the two things a recording cannot infer: what actually went
+wrong and what should have happened. Those go at the top of the description, above the captured
+evidence, because the reporter's own words are what an assignee reads first. Typed line breaks become
+separate ADF paragraphs, since ADF has no newline inside a paragraph and would otherwise run them
+together.
+
+Assignable users are fetched per project from `/rest/api/3/user/assignable/search`, because
+assignability is a project level permission. Many projects leave assignee off the create screen,
+which rejects the entire issue; when that happens the ticket is retried unassigned and the result
+screen says so, since losing the assignee beats losing the report.
+
+#### Saving to a project directory
+
+The Save As dialog takes focus, which closes the popup, and a `blob:` URL owned by a closed popup is
+revoked before Chrome can read it. Service workers have no `URL.createObjectURL` at all. So the file
+content is handed to the worker, which turns it into a data URL and calls
+`chrome.downloads.download({ saveAs: true })`. That opens the native dialog so the script can be
+routed straight into a project's `tests/` directory instead of Downloads.
+
+Filenames are editable per tab and sanitized before use: Chrome rejects absolute paths, traversal and
+reserved characters, so `../../etc/passwd` becomes `passwd.spec.ts` and the extension is reapplied if
+it was removed. Dismissing the dialog is treated as a choice, not an error.
+
 #### On credential storage
 
 `chrome.storage.local` is sandboxed to this extension, so other extensions and page scripts cannot
@@ -311,6 +334,7 @@ The `@` alias maps to `src/`.
 | `activeTab`, `tabs`         | Read the URL and title of the tab being reported on       |
 | `scripting`                 | Inject the capture logic on demand                        |
 | `storage`                   | Persist captured snapshots between popup openings         |
+| `downloads`                 | Open the native Save As dialog for generated files        |
 | `host_permissions: <all_urls>` | QA work targets arbitrary staging and production hosts |
 
 ## Roadmap

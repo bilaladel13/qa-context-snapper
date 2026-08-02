@@ -5,22 +5,25 @@ import { build } from 'vite'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = resolve(ROOT, 'node_modules', '.qa-snapper-jira')
 
-await build({
-  root: ROOT,
-  configFile: false,
-  logLevel: 'error',
-  build: {
-    outDir: OUT,
-    emptyOutDir: true,
-    minify: false,
-    lib: { entry: resolve(ROOT, 'src/jira/adf.ts'), formats: ['es'], fileName: () => 'adf.js' },
-  },
-  resolve: { alias: { '@': resolve(ROOT, 'src') } },
-})
+async function buildLib(entry, fileName) {
+  await build({
+    root: ROOT,
+    configFile: false,
+    logLevel: 'error',
+    build: {
+      outDir: resolve(OUT, fileName),
+      emptyOutDir: true,
+      minify: false,
+      lib: { entry: resolve(ROOT, entry), formats: ['es'], fileName: () => `${fileName}.js` },
+    },
+    resolve: { alias: { '@': resolve(ROOT, 'src') } },
+  })
 
-const { buildDescription, suggestSummary } = await import(
-  pathToFileURL(resolve(OUT, 'adf.js')).href
-)
+  return import(pathToFileURL(resolve(OUT, fileName, `${fileName}.js`)).href)
+}
+
+const { buildDescription, suggestSummary } = await buildLib('src/jira/adf.ts', 'adf')
+const { sanitizeFilename } = await buildLib('src/background/downloads.ts', 'downloads')
 
 const started = Date.parse('2026-07-30T10:00:00.000Z')
 
@@ -145,6 +148,59 @@ const longSummary = suggestSummary({
   consoleErrors: [{ ...snapshot.consoleErrors[0], message: 'x'.repeat(500) }],
 })
 check('long summary is clipped to 255', longSummary.length === 255)
+
+// Actual and expected, supplied by the reporter before filing.
+const detailed = buildDescription(snapshot, {
+  playwrightScript: null,
+  actual: 'Total showed NaN.\n\nOnly after removing the last item.',
+  expected: 'Total should fall back to 0.00.',
+})
+const detailedFlat = JSON.stringify(detailed)
+
+check('actual behaviour section is present', detailedFlat.includes('Actual behaviour'))
+check('actual text is included', detailedFlat.includes('Total showed NaN.'))
+check('expected text is included', detailedFlat.includes('Total should fall back to 0.00.'))
+check(
+  'each typed line becomes its own paragraph',
+  detailedFlat.includes('Only after removing the last item.') &&
+    !detailedFlat.includes('NaN.\\n'),
+)
+check('detailed document stays valid', findProblems(detailed).length === 0)
+
+const headings = (detailed.content ?? [])
+  .filter((node) => node.type === 'heading')
+  .map((node) => node.content?.[0]?.text)
+
+check(
+  'reporter sections come before the captured evidence',
+  headings.indexOf('Actual behaviour') === 0 && headings.indexOf('Environment') > headings.indexOf('Expected result'),
+  headings.join(' | '),
+)
+
+const blank = buildDescription(snapshot, { playwrightScript: null, actual: '', expected: '   ' })
+check('blank details fall back to prompts', JSON.stringify(blank).includes('Describe what went wrong.'))
+check('blank details stay valid', findProblems(blank).length === 0)
+
+// Chrome rejects traversal, absolute paths and reserved characters.
+const filenameCases = [
+  ['email-validation', 'email-validation.spec.ts'],
+  ['email-validation.spec.ts', 'email-validation.spec.ts'],
+  ['../../etc/passwd', 'passwd.spec.ts'],
+  ['C:\\Windows\\system32\\evil', 'evil.spec.ts'],
+  ['my test<>:"|?*.spec.ts', 'my-test-.spec.ts'],
+  ['   ', 'bug-report.spec.ts'],
+  ['...', 'bug-report.spec.ts'],
+]
+
+for (const [input, expectedName] of filenameCases) {
+  const actualName = sanitizeFilename(input, 'bug-report', '.spec.ts')
+  check(`filename "${input.trim() || '(blank)'}" resolves safely`, actualName === expectedName, `got ${actualName}`)
+}
+
+check(
+  'filenames never keep a path separator',
+  filenameCases.every(([input]) => !sanitizeFilename(input, 'bug-report', '.spec.ts').match(/[\\/]/)),
+)
 
 for (const entry of results) {
   process.stdout.write(`${entry.passed ? 'ok  ' : 'FAIL'}  ${entry.name}\n`)
