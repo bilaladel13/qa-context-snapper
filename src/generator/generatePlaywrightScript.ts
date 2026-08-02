@@ -1,46 +1,71 @@
 import { DEFAULT_SETTINGS, resolvePlaywrightSettings } from '@/settings/schema'
 import type { PlaywrightSettings } from '@/settings/schema'
-import type { ContextSnapshot, ElementTarget, InteractionEvent } from '@/types'
+import type {
+  ContextSnapshot,
+  ElementTarget,
+  InteractionEvent,
+  LocatorScope,
+  LocatorStrategy,
+} from '@/types'
 import { originOf, parseViewport, quote, relativizeUrl, resolveStrategy, trimEllipsis } from './shared'
+
+function leafExpression(
+  strategy: LocatorStrategy,
+  value: string,
+  accessibleName: string | undefined,
+  q: (input: string) => string,
+): string {
+  switch (strategy) {
+    case 'testId':
+      return `getByTestId(${q(value)})`
+    case 'role': {
+      const name = accessibleName ? trimEllipsis(accessibleName) : ''
+      return name ? `getByRole(${q(value)}, { name: ${q(name)} })` : `getByRole(${q(value)})`
+    }
+    case 'label':
+      return `getByLabel(${q(trimEllipsis(value))})`
+    case 'placeholder':
+      return `getByPlaceholder(${q(trimEllipsis(value))})`
+    case 'text':
+      return `getByText(${q(trimEllipsis(value))})`
+    case 'css':
+      return `locator(${q(value)})`
+  }
+}
+
+function scopeExpression(scope: LocatorScope, q: (input: string) => string): string {
+  const base = leafExpression(scope.strategy, scope.value, scope.accessibleName, q)
+  const filtered = scope.hasText ? `${base}.filter({ hasText: ${q(scope.hasText)} })` : base
+
+  return `page.${filtered}`
+}
 
 function locator(
   target: ElementTarget,
   options: PlaywrightSettings,
   { indexed = true }: { indexed?: boolean } = {},
 ): string {
-  const { strategy, value, nth } = resolveStrategy(target, options.selectorPreference)
+  const { strategy, value, hasText, scope, nth } = resolveStrategy(
+    target,
+    options.selectorPreference,
+  )
   const q = (input: string) => quote(input, options.quoteStyle)
 
-  let base: string
+  const root = scope ? scopeExpression(scope, q) : 'page'
+  const base = `${root}.${leafExpression(strategy, value, target.accessibleName, q)}`
 
-  switch (strategy) {
-    case 'testId':
-      base = `page.getByTestId(${q(value)})`
-      break
-    case 'role': {
-      const name = target.accessibleName ? trimEllipsis(target.accessibleName) : ''
-      base = name
-        ? `page.getByRole(${q(value)}, { name: ${q(name)} })`
-        : `page.getByRole(${q(value)})`
-      break
-    }
-    case 'label':
-      base = `page.getByLabel(${q(trimEllipsis(value))})`
-      break
-    case 'placeholder':
-      base = `page.getByPlaceholder(${q(trimEllipsis(value))})`
-      break
-    case 'text':
-      base = `page.getByText(${q(trimEllipsis(value))})`
-      break
-    case 'css':
-      base = `page.locator(${q(value)})`
-      break
+  // Identity first: filtering by the element's own text, or chaining from the
+  // row that owns it, both survive a list being reordered or added to.
+  if (hasText) {
+    return `${base}.filter({ hasText: ${q(hasText)} })`
   }
 
-  // Without this the locator resolves to several elements and Playwright fails
-  // the step under strict mode instead of acting on the recorded one. A count
-  // assertion is the exception: it is about the whole set.
+  if (scope) {
+    return base
+  }
+
+  // Positional, and only reached when nothing else singled the element out. A
+  // count assertion is about the whole set, so it is never indexed.
   return nth === undefined || !indexed ? base : `${base}.nth(${nth})`
 }
 

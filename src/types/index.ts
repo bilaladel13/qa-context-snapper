@@ -64,10 +64,23 @@ export interface AssertionDetail {
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'
 
+// An identifiable ancestor to chain from, so a element in a list is found by
+// which row it belongs to rather than by its position among its peers.
+export interface LocatorScope {
+  strategy: LocatorStrategy
+  value: string
+  accessibleName?: string
+  hasText?: string
+}
+
 export interface LocatorCandidate {
   value: string
-  // Set only when this locator resolves to more than one element, which would
-  // otherwise be a Playwright strict mode violation. Zero based.
+  // Ways to single out one element, in descending order of resilience. Only one
+  // is ever set, and only after being proven unique against the live DOM.
+  hasText?: string
+  scope?: LocatorScope
+  // Positional, so it survives neither reordering nor an added row. Recorded
+  // last, when nothing about the element or its ancestors distinguishes it.
   nth?: number
   total?: number
 }

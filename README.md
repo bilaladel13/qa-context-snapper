@@ -237,6 +237,34 @@ selector preference, structure or quote style re-emits the script from the store
 background watches `chrome.storage.onChanged` and regenerates automatically, so the result view
 updates while the settings are open.
 
+### Resilient locators
+
+`.nth(2)` encodes *position*, and position is the first thing a dynamic list breaks: add a row,
+reorder, or delete one, and index 2 is a different element. But swapping wholesale to
+`filter({ hasText })` trades one failure for another, because several rows can share a name.
+
+So ambiguity is resolved down a ladder, and every rung is proven against the live DOM before it is
+recorded. Nothing is emitted that has not been shown to resolve to exactly one element.
+
+1. **The element's own text**, when it is unique among the matches.
+   `getByTestId('member-email').filter({ hasText: 'sara@example.com' })`
+2. **The nearest identifiable ancestor**, when the element itself is anonymous. Every Remove button
+   reads the same, so identity comes from the row that owns it.
+   `getByRole('row').filter({ hasText: 'omar@example.com' }).getByTestId('remove')`
+   A container with its own test id or a stable id is preferred over inventing text for it.
+3. **Position**, only when nothing distinguishes the element or any ancestor.
+   `getByTestId('dot').nth(2)`
+
+Ancestors are walked outward from the element. Containment only grows going up, so once an ancestor
+holds more than one match no further ancestor can help, and the search stops.
+
+A scope is named with `{ name }` only when the name was **authored**, through `aria-label`,
+`aria-labelledby` or `title`. A container's accessible name otherwise falls back to its own text
+content, which for a table row is every cell joined together: brittle, and for roles that do not
+take their name from content it would not match at all.
+
+The match total is kept whichever rung wins, because a count assertion is about the unnarrowed set.
+
 ### Strict mode safe locators
 
 Playwright fails a step when a locator resolves to more than one element, which

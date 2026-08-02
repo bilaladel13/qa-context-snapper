@@ -5,6 +5,7 @@ import type {
   InteractionEvent,
   LocatorCandidate,
   LocatorCandidates,
+  LocatorScope,
   LocatorStrategy,
 } from '@/types'
 
@@ -31,6 +32,8 @@ export function escapeTableCell(value: string): string {
 export interface ResolvedLocator {
   strategy: LocatorStrategy
   value: string
+  hasText?: string
+  scope?: LocatorScope
   nth?: number
 }
 
@@ -69,7 +72,13 @@ export function resolveStrategy(
   for (const strategy of order) {
     const candidate = readCandidate(candidates[strategy])
     if (candidate) {
-      return { strategy, value: candidate.value, nth: candidate.nth }
+      return {
+        strategy,
+        value: candidate.value,
+        hasText: candidate.hasText,
+        scope: candidate.scope,
+        nth: candidate.nth,
+      }
     }
   }
 

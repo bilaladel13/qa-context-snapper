@@ -254,6 +254,114 @@ const checks = [
   ['every resiliency script parses', [relative, absolute, forcedCss, legacy].every((s) => parses(s) === null)],
 ]
 
+// The locator resilience ladder, as it reaches the emitted script.
+const resilientSnapshot = {
+  sessionId: 'resilient',
+  startedAt: started,
+  stoppedAt: at(10_000),
+  environment: { ...snapshot.environment, pageUrl: 'https://app.example.com/members' },
+  consoleErrors: [],
+  interactions: [
+    { id: 'r0', type: 'navigation', target: null, value: 'https://app.example.com/members', url: 'x', timestamp: at(0) },
+    {
+      id: 'r1',
+      type: 'click',
+      target: {
+        strategy: 'testId',
+        value: 'member-email',
+        tagName: 'td',
+        cssSelector: 'td',
+        candidates: { testId: { value: 'member-email', hasText: 'sara@example.com', total: 3 } },
+      },
+      url: 'x',
+      timestamp: at(1000),
+    },
+    {
+      id: 'r2',
+      type: 'click',
+      target: {
+        strategy: 'testId',
+        value: 'remove',
+        tagName: 'button',
+        cssSelector: 'button',
+        candidates: {
+          testId: {
+            value: 'remove',
+            total: 3,
+            scope: { strategy: 'role', value: 'row', hasText: 'omar@example.com' },
+          },
+        },
+      },
+      url: 'x',
+      timestamp: at(2000),
+    },
+    {
+      id: 'r3',
+      type: 'click',
+      target: {
+        strategy: 'testId',
+        value: 'save',
+        tagName: 'button',
+        cssSelector: 'button',
+        candidates: {
+          testId: { value: 'save', total: 2, scope: { strategy: 'testId', value: 'shipping' } },
+        },
+      },
+      url: 'x',
+      timestamp: at(3000),
+    },
+    {
+      id: 'r4',
+      type: 'click',
+      target: {
+        strategy: 'role',
+        value: 'link',
+        accessibleName: 'Download',
+        tagName: 'a',
+        cssSelector: 'a',
+        candidates: {
+          role: {
+            value: 'link',
+            total: 2,
+            scope: { strategy: 'role', value: 'listitem', accessibleName: 'Invoice 1002' },
+          },
+        },
+      },
+      url: 'x',
+      timestamp: at(4000),
+    },
+    {
+      id: 'r5',
+      type: 'click',
+      target: {
+        strategy: 'testId',
+        value: 'dot',
+        tagName: 'span',
+        cssSelector: 'span',
+        candidates: { testId: { value: 'dot', nth: 2, total: 3 } },
+      },
+      url: 'x',
+      timestamp: at(5000),
+    },
+  ],
+}
+
+const resilient = generatePlaywrightScript(resilientSnapshot, DEFAULTS)
+
+show('\n--- resilient locators ---\n')
+show(resilient + '\n')
+
+checks.push(
+  ['unique text becomes a filter', resilient.includes(".getByTestId('member-email').filter({ hasText: 'sara@example.com' })")],
+  ['an identical control chains from its row', resilient.includes("page.getByRole('row').filter({ hasText: 'omar@example.com' }).getByTestId('remove')")],
+  ['a container test id becomes the chain root', resilient.includes("page.getByTestId('shipping').getByTestId('save')")],
+  ['a named container keeps its name', resilient.includes("page.getByRole('listitem', { name: 'Invoice 1002' }).getByRole('link', { name: 'Download' })")],
+  ['position is still available as a last resort', resilient.includes(".getByTestId('dot').nth(2)")],
+  ['identity locators never also carry an index', !/filter\(\{ hasText[^)]*\}\)\.nth\(/.test(resilient)],
+  ['scoped locators never also carry an index', !/getByTestId\('remove'\)\.nth\(/.test(resilient)],
+  ['the resilient script parses', parses(resilient) === null],
+)
+
 const asserted = generatePlaywrightScript(assertionSnapshot, DEFAULTS)
 
 show('\n--- assertions ---\n')

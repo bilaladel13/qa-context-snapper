@@ -1,7 +1,13 @@
 import { DEFAULT_SETTINGS, parseTestIdAttributes } from '@/settings/schema'
 import { MAX_TEXT_LENGTH } from '@/shared/constants'
 import { collapse, looseMatches, trimEllipsis, truncate } from '@/shared/text'
-import type { ElementTarget, LocatorCandidate, LocatorCandidates, LocatorStrategy } from '@/types'
+import type {
+  ElementTarget,
+  LocatorCandidate,
+  LocatorCandidates,
+  LocatorScope,
+  LocatorStrategy,
+} from '@/types'
 
 let testIdAttributes = parseTestIdAttributes(DEFAULT_SETTINGS.capture.testIdAttributes)
 
@@ -31,6 +37,9 @@ const INPUT_ROLES: Record<string, string> = {
   url: 'textbox',
 }
 
+// Only mappings that hold unconditionally. Roles such as banner or region
+// depend on where the element sits, and guessing wrong would mean emitting a
+// locator that resolves differently in Playwright than it did here.
 const TAG_ROLES: Record<string, string> = {
   BUTTON: 'button',
   SELECT: 'combobox',
@@ -46,7 +55,37 @@ const TAG_ROLES: Record<string, string> = {
   MAIN: 'main',
   TABLE: 'table',
   FORM: 'form',
+  TR: 'row',
+  LI: 'listitem',
+  UL: 'list',
+  OL: 'list',
+  TD: 'cell',
+  ARTICLE: 'article',
+  FIELDSET: 'group',
+  DIALOG: 'dialog',
+  TBODY: 'rowgroup',
+  THEAD: 'rowgroup',
+  TFOOT: 'rowgroup',
 }
+
+// Containers worth chaining from. A cell or a row identifies a record; a button
+// does not contain anything worth scoping to.
+const SCOPE_ROLES = new Set([
+  'row',
+  'listitem',
+  'article',
+  'group',
+  'form',
+  'dialog',
+  'table',
+  'list',
+  'rowgroup',
+  'cell',
+])
+
+const MAX_SCOPE_DEPTH = 6
+const MAX_SCOPE_TEXTS = 12
+const MAX_SCOPE_DESCENDANTS = 80
 
 // Narrows the element set before the per element role check, so counting never
 // walks the whole document for a role query.
@@ -68,6 +107,14 @@ const ROLE_SELECTORS: Record<string, string> = {
   main: 'main',
   table: 'table',
   form: 'form',
+  row: 'tr',
+  listitem: 'li',
+  list: 'ul, ol',
+  cell: 'td',
+  article: 'article',
+  group: 'fieldset',
+  dialog: 'dialog',
+  rowgroup: 'tbody, thead, tfoot',
 }
 
 const LABELLABLE = 'input, select, textarea, [contenteditable="true"], [contenteditable=""]'
@@ -178,6 +225,22 @@ export function accessibleName(element: Element): string {
   }
 
   return truncate(collapse(element.textContent), MAX_TEXT_LENGTH)
+}
+
+// Only names an author actually wrote. A container's accessible name often
+// falls back to its own text content, which for a table row is every cell
+// joined together: brittle, and not a name at all for roles that do not take
+// their name from content.
+function authoredName(element: Element): string {
+  const ariaLabel = collapse(element.getAttribute('aria-label'))
+
+  if (ariaLabel) {
+    return ariaLabel
+  }
+
+  const referenced = referencedText(element)
+
+  return referenced || collapse(element.getAttribute('title'))
 }
 
 function isStableToken(token: string): boolean {
@@ -322,6 +385,128 @@ function matchesFor(
   }
 }
 
+// Text held by a container that might tell it apart from its siblings. Leaf
+// elements only, because a wrapper's text is just its children concatenated.
+function distinctiveTexts(ancestor: Element): string[] {
+  const descendants = Array.from(ancestor.querySelectorAll('*')).slice(0, MAX_SCOPE_DESCENDANTS)
+  const seen = new Set<string>()
+  const texts: string[] = []
+
+  for (const element of descendants) {
+    if (element.children.length > 0) {
+      continue
+    }
+
+    const text = collapse(element.textContent)
+
+    if (text.length < 2 || text.length > MAX_TEXT_LENGTH || seen.has(text)) {
+      continue
+    }
+
+    seen.add(text)
+    texts.push(text)
+
+    if (texts.length >= MAX_SCOPE_TEXTS) {
+      break
+    }
+  }
+
+  return texts
+}
+
+// Describes an ancestor only if that description resolves to it alone. Peers are
+// resolved once and then filtered in memory, so trying many texts stays cheap.
+function scopeDescriptor(ancestor: Element): LocatorScope | null {
+  const identifier = testIdOf(ancestor)
+
+  if (identifier) {
+    const matches = queryAll(attributeSelector(identifier.attribute, identifier.value))
+
+    if (matches?.length === 1) {
+      return { strategy: 'testId', value: identifier.value }
+    }
+  }
+
+  const domId = ancestor.getAttribute('id')
+
+  if (domId && isStableToken(domId) && isUnique(`#${CSS.escape(domId)}`)) {
+    return { strategy: 'css', value: `#${CSS.escape(domId)}` }
+  }
+
+  const role = implicitRole(ancestor)
+
+  if (!role || !SCOPE_ROLES.has(role)) {
+    return null
+  }
+
+  const peers = roleMatches(role, '')
+
+  if (!peers || peers.length === 0) {
+    return null
+  }
+
+  if (peers.length === 1) {
+    return { strategy: 'role', value: role }
+  }
+
+  const name = trimEllipsis(authoredName(ancestor))
+
+  // Peers are still compared on their full accessible name, because that is
+  // what Playwright resolves the name option against.
+  if (name && peers.filter((peer) => looseMatches(accessibleName(peer), name)).length === 1) {
+    return { strategy: 'role', value: role, accessibleName: name }
+  }
+
+  for (const text of distinctiveTexts(ancestor)) {
+    if (peers.filter((peer) => looseMatches(peer.textContent, text)).length === 1) {
+      return { strategy: 'role', value: role, hasText: text }
+    }
+  }
+
+  return null
+}
+
+// Walks outward for the nearest ancestor that both narrows the matches to this
+// one element and can be named. Containment only grows going up, so once an
+// ancestor holds more than one match no further ancestor can help.
+function findScope(element: Element, matches: Element[]): LocatorScope | null {
+  let current = element.parentElement
+
+  for (let depth = 0; current && depth < MAX_SCOPE_DEPTH; depth += 1) {
+    const inside = matches.filter((match) => current?.contains(match))
+
+    if (inside.length > 1) {
+      return null
+    }
+
+    if (inside.length === 1 && inside[0] === element) {
+      const descriptor = scopeDescriptor(current)
+
+      if (descriptor) {
+        return descriptor
+      }
+    }
+
+    current = current.parentElement
+  }
+
+  return null
+}
+
+function distinguishingText(element: Element, matches: Element[]): string | undefined {
+  const text = trimEllipsis(truncate(collapse(element.textContent), MAX_TEXT_LENGTH))
+
+  if (text.length < 2) {
+    return undefined
+  }
+
+  return matches.filter((match) => looseMatches(match.textContent, text)).length === 1
+    ? text
+    : undefined
+}
+
+// Ambiguity is resolved by identity where possible and by position only as a
+// last resort, since an index assumes the list never changes.
 function describeCandidate(
   element: Element,
   strategy: LocatorStrategy,
@@ -336,9 +521,25 @@ function describeCandidate(
 
   const nth = matches.indexOf(element)
 
-  // A negative index means the emulation disagrees with the real DOM, so the
-  // count cannot be trusted either. A bare locator beats a wrong .nth().
-  return nth < 0 ? { value } : { value, nth, total: matches.length }
+  // A negative index means the emulation disagrees with the real DOM, so
+  // nothing derived from these matches can be trusted. A bare locator beats a
+  // wrong disambiguator.
+  if (nth < 0) {
+    return { value }
+  }
+
+  // total is kept whichever way the ambiguity is resolved, because a count
+  // assertion is about the unnarrowed set.
+  const total = matches.length
+  const hasText = distinguishingText(element, matches)
+
+  if (hasText) {
+    return { value, hasText, total }
+  }
+
+  const scope = findScope(element, matches)
+
+  return scope ? { value, scope, total } : { value, nth, total }
 }
 
 // Ordered by how resilient the resulting Playwright locator is to markup churn.
