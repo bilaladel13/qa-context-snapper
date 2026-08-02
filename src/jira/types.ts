@@ -25,13 +25,24 @@ export interface JiraConnection {
   hasToken: boolean
 }
 
+export interface JiraUser {
+  accountId: string
+  displayName: string
+  emailAddress: string | null
+}
+
 export interface JiraCreatedIssue {
   key: string
   url: string
+  // Set when the issue was filed but something had to be dropped to succeed.
+  warning?: string
 }
 
 export interface JiraDraft {
   summary: string
   projectKey: string
   issueTypeId: string
+  assigneeAccountId: string | null
+  actual: string
+  expected: string
 }

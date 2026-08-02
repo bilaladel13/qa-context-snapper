@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { Field } from '@/components/Field'
 import { Select } from '@/components/Select'
+import { Textarea } from '@/components/Textarea'
 import { TextInput } from '@/components/TextInput'
 import { CheckIcon, ExternalIcon, ResetIcon } from '@/components/icons'
 import { suggestSummary } from '@/jira/adf'
@@ -11,6 +13,25 @@ import type { SettingsController } from '@/popup/useSettings'
 import type { ContextSnapshot } from '@/types'
 
 const SUMMARY_LIMIT = 255
+const UNASSIGNED = ''
+
+interface GroupProps {
+  title: string
+  children: ReactNode
+}
+
+function Group({ title, children }: GroupProps) {
+  return (
+    <section>
+      <h2 className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
+        {title}
+      </h2>
+      <div className="divide-y divide-surface-border rounded-lg border border-surface-border bg-surface-raised px-3">
+        {children}
+      </div>
+    </section>
+  )
+}
 
 interface JiraViewProps {
   jira: JiraController
@@ -20,12 +41,15 @@ interface JiraViewProps {
 }
 
 export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewProps) {
-  const { projects, connection, busy, error, created } = jira
+  const { projects, assignees, connection, busy, error, created } = jira
   const selection = settings.settings.jira
 
   const [summary, setSummary] = useState('')
+  const [actual, setActual] = useState('')
+  const [expected, setExpected] = useState('')
   const [projectKey, setProjectKey] = useState(selection.projectKey)
   const [issueTypeId, setIssueTypeId] = useState(selection.issueTypeId)
+  const [assigneeAccountId, setAssigneeAccountId] = useState(UNASSIGNED)
 
   useEffect(() => {
     if (snapshot) {
@@ -55,6 +79,12 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
     }
   }, [project, issueTypeId])
 
+  // Assignable users are per project, so the list and any selection reset with it.
+  useEffect(() => {
+    setAssigneeAccountId(UNASSIGNED)
+    jira.loadAssignees(projectKey)
+  }, [projectKey, jira.loadAssignees])
+
   const remember = (key: string, id: string) => {
     const nextProject = projects.find((entry) => entry.key === key)
     const nextType = nextProject?.issueTypes.find((entry) => entry.id === id)
@@ -72,7 +102,14 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
   }
 
   const submit = async () => {
-    const success = await jira.createIssue({ summary, projectKey, issueTypeId })
+    const success = await jira.createIssue({
+      summary,
+      projectKey,
+      issueTypeId,
+      assigneeAccountId: assigneeAccountId || null,
+      actual,
+      expected,
+    })
 
     if (success) {
       remember(projectKey, issueTypeId)
@@ -90,6 +127,13 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
             <p className="text-sm font-semibold text-ink">Ticket created</p>
             <p className="mt-1 font-mono text-xs text-ink-muted">{created.key}</p>
           </div>
+
+          {created.warning ? (
+            <p className="rounded-lg border border-warn-border bg-warn-surface px-3 py-2 text-[11px] leading-relaxed text-warn-ink">
+              {created.warning}
+            </p>
+          ) : null}
+
           <Button
             onClick={() => void chrome.tabs.create({ url: created.url })}
             icon={<ExternalIcon className="size-3.5" />}
@@ -124,7 +168,7 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
 
   return (
     <>
-      <main className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <main className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
         {error ? <ErrorBanner message={error} onDismiss={jira.dismissError} /> : null}
 
         {snapshot === null ? (
@@ -133,7 +177,7 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
           </p>
         ) : null}
 
-        <div className="divide-y divide-surface-border rounded-lg border border-surface-border bg-surface-raised px-3">
+        <Group title="Report">
           <Field
             label="Summary"
             hint="The ticket title. Prefilled from the page title and the first console error."
@@ -149,6 +193,36 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
             />
           </Field>
 
+          <Field
+            label="Actual behaviour"
+            hint="What actually went wrong, in your own words. Appears at the top of the ticket, above the captured evidence. Each line becomes its own paragraph."
+            htmlFor="jira-actual"
+            stacked
+          >
+            <Textarea
+              id="jira-actual"
+              value={actual}
+              onChange={(event) => setActual(event.target.value)}
+              placeholder="The order total showed as NaN after removing the last item."
+            />
+          </Field>
+
+          <Field
+            label="Expected result"
+            hint="What should have happened instead. Gives the assignee the acceptance criterion to fix against."
+            htmlFor="jira-expected"
+            stacked
+          >
+            <Textarea
+              id="jira-expected"
+              value={expected}
+              onChange={(event) => setExpected(event.target.value)}
+              placeholder="The total should fall back to 0.00 when the basket is empty."
+            />
+          </Field>
+        </Group>
+
+        <Group title="Destination">
           <Field
             label="Project"
             hint="Loaded from your Jira site. Only projects this account can see are listed."
@@ -185,11 +259,35 @@ export function JiraView({ jira, settings, snapshot, onOpenSettings }: JiraViewP
               onChange={(event) => setIssueTypeId(event.target.value)}
             />
           </Field>
-        </div>
+
+          <Field
+            label="Assignee"
+            hint="Users Jira reports as assignable on this project. Leave unassigned to let the team triage it. Some projects do not allow an assignee on create, in which case the ticket is filed unassigned and says so."
+            htmlFor="jira-assignee"
+            stacked
+          >
+            <Select
+              id="jira-assignee"
+              value={assigneeAccountId}
+              disabled={!project || jira.loadingAssignees}
+              options={[
+                { value: UNASSIGNED, label: jira.loadingAssignees ? 'Loading users' : 'Unassigned' },
+                ...assignees.map((user) => ({
+                  value: user.accountId,
+                  label: user.emailAddress
+                    ? `${user.displayName} (${user.emailAddress})`
+                    : user.displayName,
+                })),
+              ]}
+              onChange={(event) => setAssigneeAccountId(event.target.value)}
+            />
+          </Field>
+        </Group>
 
         <div className="flex items-center justify-between gap-2 px-1">
           <p className="truncate text-[10px] text-ink-subtle">
-            {connection.accountName ?? connection.email} at {connection.domain.replace(/^https:\/\//, '')}
+            {connection.accountName ?? connection.email} at{' '}
+            {connection.domain.replace(/^https:\/\//, '')}
           </p>
           <button
             type="button"

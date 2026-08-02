@@ -1,6 +1,6 @@
 import { generatePlaywrightScript } from '@/generator'
 import { buildDescription } from '@/jira/adf'
-import { createIssue, listProjects, verifyCredentials } from '@/jira/api'
+import { createIssue, listAssignableUsers, listProjects, verifyCredentials } from '@/jira/api'
 import { clearCredentials, normalizeDomain, readCredentials, writeCredentials } from '@/jira/store'
 import type { JiraConnection } from '@/jira/types'
 import { fail, ok } from '@/messaging/protocol'
@@ -105,20 +105,37 @@ async function projects(): Promise<Result<unknown>> {
   return response.ok ? ok({ projects: response.data }) : response
 }
 
-async function create(draft: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Promise<Result<unknown>> {
+async function assignees(projectKey: string): Promise<Result<unknown>> {
   const credentials = await readCredentials()
 
   if (!credentials) {
     return fail('Connect a Jira account first.')
   }
 
-  const summary = draft.draft.summary.trim()
+  if (!projectKey) {
+    return ok({ users: [] })
+  }
+
+  const response = await listAssignableUsers(credentials, projectKey)
+
+  return response.ok ? ok({ users: response.data }) : response
+}
+
+async function create(request: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Promise<Result<unknown>> {
+  const credentials = await readCredentials()
+
+  if (!credentials) {
+    return fail('Connect a Jira account first.')
+  }
+
+  const { draft } = request
+  const summary = draft.summary.trim()
 
   if (!summary) {
     return fail('Enter a summary for the ticket.')
   }
 
-  if (!draft.draft.projectKey || !draft.draft.issueTypeId) {
+  if (!draft.projectKey || !draft.issueTypeId) {
     return fail('Choose a project and an issue type.')
   }
 
@@ -134,12 +151,15 @@ async function create(draft: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Promi
     : null
 
   return createIssue(credentials, {
-    projectKey: draft.draft.projectKey,
-    issueTypeId: draft.draft.issueTypeId,
+    projectKey: draft.projectKey,
+    issueTypeId: draft.issueTypeId,
+    assigneeAccountId: draft.assigneeAccountId,
     summary,
     description: buildDescription(state.snapshot, {
       playwrightScript: script,
       includeConsoleErrors: settings.jira.includeConsoleErrors,
+      actual: draft.actual,
+      expected: draft.expected,
     }),
   })
 }
@@ -154,6 +174,8 @@ export function handleJiraRequest(request: JiraRequest): Promise<Result<unknown>
       return disconnect()
     case 'JIRA_LIST_PROJECTS':
       return projects()
+    case 'JIRA_LIST_ASSIGNEES':
+      return assignees(request.projectKey)
     case 'JIRA_CREATE_ISSUE':
       return create(request)
   }

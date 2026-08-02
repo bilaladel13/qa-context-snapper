@@ -1,7 +1,7 @@
 import { fail, ok } from '@/messaging/protocol'
 import type { Result } from '@/messaging/protocol'
 import type { AdfDocument } from './adf'
-import type { JiraCreatedIssue, JiraCredentials, JiraProject } from './types'
+import type { JiraCreatedIssue, JiraCredentials, JiraProject, JiraUser } from './types'
 
 const REQUEST_TIMEOUT_MS = 20_000
 const PROJECT_PAGE_SIZE = 100
@@ -152,21 +152,85 @@ export async function listProjects(
     : fail('No Jira projects are visible to this account.')
 }
 
+const ASSIGNEE_PAGE_SIZE = 100
+
+interface AssignableUser {
+  accountId?: string
+  displayName?: string
+  emailAddress?: string
+  active?: boolean
+  accountType?: string
+}
+
+export async function listAssignableUsers(
+  credentials: JiraCredentials,
+  projectKey: string,
+): Promise<Result<JiraUser[]>> {
+  const response = await request<AssignableUser[]>(
+    credentials,
+    `/rest/api/3/user/assignable/search?project=${encodeURIComponent(projectKey)}&maxResults=${ASSIGNEE_PAGE_SIZE}`,
+  )
+
+  if (!response.ok) {
+    return response
+  }
+
+  const users = (response.data ?? [])
+    .filter((user) => user.accountId && user.active !== false && user.accountType !== 'app')
+    .map((user) => ({
+      accountId: user.accountId as string,
+      displayName: user.displayName ?? 'Unnamed user',
+      emailAddress: user.emailAddress ?? null,
+    }))
+
+  return ok(users)
+}
+
+export interface CreateIssueInput {
+  projectKey: string
+  issueTypeId: string
+  summary: string
+  description: AdfDocument
+  assigneeAccountId: string | null
+}
+
+function issuePayload(input: CreateIssueInput, withAssignee: boolean): string {
+  return JSON.stringify({
+    fields: {
+      project: { key: input.projectKey },
+      issuetype: { id: input.issueTypeId },
+      summary: input.summary,
+      description: input.description,
+      ...(withAssignee && input.assigneeAccountId
+        ? { assignee: { id: input.assigneeAccountId } }
+        : {}),
+    },
+  })
+}
+
 export async function createIssue(
   credentials: JiraCredentials,
-  input: { projectKey: string; issueTypeId: string; summary: string; description: AdfDocument },
+  input: CreateIssueInput,
 ): Promise<Result<JiraCreatedIssue>> {
-  const response = await request<{ key?: string }>(credentials, '/rest/api/3/issue', {
-    method: 'POST',
-    body: JSON.stringify({
-      fields: {
-        project: { key: input.projectKey },
-        issuetype: { id: input.issueTypeId },
-        summary: input.summary,
-        description: input.description,
-      },
-    }),
-  })
+  const submit = (withAssignee: boolean) =>
+    request<{ key?: string }>(credentials, '/rest/api/3/issue', {
+      method: 'POST',
+      body: issuePayload(input, withAssignee),
+    })
+
+  let warning: string | undefined
+  let response = await submit(true)
+
+  // Plenty of projects leave assignee off the create screen, which rejects the
+  // whole issue. Losing the assignee beats losing the report.
+  if (!response.ok && input.assigneeAccountId && /assignee/i.test(response.error)) {
+    const retry = await submit(false)
+
+    if (retry.ok) {
+      warning = 'This project does not allow setting an assignee on create, so the ticket was filed unassigned.'
+      response = retry
+    }
+  }
 
   if (!response.ok) {
     return response
@@ -175,6 +239,6 @@ export async function createIssue(
   const key = response.data.key
 
   return key
-    ? ok({ key, url: `${credentials.domain}/browse/${key}` })
+    ? ok({ key, url: `${credentials.domain}/browse/${key}`, warning })
     : fail('Jira created the issue but did not return its key.')
 }

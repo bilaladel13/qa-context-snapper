@@ -72,6 +72,17 @@ function orderedList(items: string[]): AdfNode {
   }
 }
 
+// ADF has no concept of a newline inside a paragraph, so typed line breaks
+// become separate paragraphs rather than being flattened into one run-on block.
+function richText(value: string, placeholder: string): AdfNode[] {
+  const blocks = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  return blocks.length > 0 ? blocks.map(paragraph) : [paragraph(placeholder)]
+}
+
 function formatConsoleError(entry: ConsoleErrorEntry): string {
   const location = entry.source
     ? ` (${entry.source}${entry.lineNumber ? `:${entry.lineNumber}` : ''})`
@@ -99,6 +110,8 @@ export function suggestSummary(snapshot: ContextSnapshot): string {
 interface DescriptionOptions {
   playwrightScript: string | null
   includeConsoleErrors?: boolean
+  actual?: string
+  expected?: string
 }
 
 export function buildDescription(
@@ -118,6 +131,12 @@ export function buildDescription(
         ),
       ],
     },
+    // The reporter's own words come first. Everything below is machine captured
+    // detail that supports them.
+    heading(2, 'Actual behaviour'),
+    ...richText(options.actual ?? '', 'Describe what went wrong.'),
+    heading(2, 'Expected result'),
+    ...richText(options.expected ?? '', 'Describe what should have happened.'),
     heading(2, 'Environment'),
     table([
       ['Browser', `${environment.browser} ${environment.browserVersion}`],
@@ -148,9 +167,6 @@ export function buildDescription(
     content.push(heading(2, 'Playwright reproduction'))
     content.push(codeBlock('typescript', options.playwrightScript))
   }
-
-  content.push(heading(2, 'Expected result'))
-  content.push(paragraph('Describe what should have happened.'))
 
   return { type: 'doc', version: 1, content }
 }
