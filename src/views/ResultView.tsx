@@ -5,7 +5,7 @@ import { Collapsible } from '@/components/Collapsible'
 import { ConsoleErrorsPanel } from '@/components/ConsoleErrorsPanel'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { StepsPanel } from '@/components/StepsPanel'
-import { ResetIcon } from '@/components/icons'
+import { JiraIcon, ResetIcon } from '@/components/icons'
 import type { RecorderState } from '@/types'
 
 type Tab = 'markdown' | 'playwright'
@@ -29,9 +29,10 @@ interface ResultViewProps {
   state: RecorderState
   pending: boolean
   onReset: () => void
+  onCreateTicket: () => void
 }
 
-export function ResultView({ state, pending, onReset }: ResultViewProps) {
+export function ResultView({ state, pending, onReset, onCreateTicket }: ResultViewProps) {
   const [active, setActive] = useState<Tab>('markdown')
 
   const baseName = useMemo(() => {
@@ -90,12 +91,20 @@ export function ResultView({ state, pending, onReset }: ResultViewProps) {
         )}
       </main>
 
-      <footer className="shrink-0 border-t border-surface-border px-4 py-3">
+      <footer className="shrink-0 space-y-2 border-t border-surface-border px-4 py-3">
+        <Button
+          onClick={onCreateTicket}
+          disabled={pending || snapshot === null}
+          className="w-full"
+          icon={<JiraIcon className="size-3.5" />}
+        >
+          Create Jira Ticket
+        </Button>
         <Button
           variant="ghost"
           onClick={onReset}
           disabled={pending}
-          className="w-full"
+          className="w-full py-2 text-xs"
           icon={<ResetIcon className="size-3.5" />}
         >
           Start Over

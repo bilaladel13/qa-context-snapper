@@ -113,6 +113,15 @@ export function ExternalIcon({ className }: IconProps) {
   )
 }
 
+export function JiraIcon({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <path d="M12 2 4 10a3 3 0 0 0 0 4l8 8 8-8a3 3 0 0 0 0-4z" />
+      <path d="M12 8v8" />
+    </svg>
+  )
+}
+
 export function SunIcon({ className }: IconProps) {
   return (
     <svg {...base(className)}>

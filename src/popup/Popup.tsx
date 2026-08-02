@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { Header } from '@/components/Header'
 import { IdleView } from '@/views/IdleView'
+import { JiraView } from '@/views/JiraView'
 import { RecordingView } from '@/views/RecordingView'
 import { ResultView } from '@/views/ResultView'
 import { SettingsView } from '@/views/SettingsView'
 import { useEnvironment } from './useEnvironment'
+import { useJira } from './useJira'
 import { useRecorder } from './useRecorder'
 import { useSettings } from './useSettings'
 import { SHORTCUTS_PAGE, useShortcut } from './useShortcut'
@@ -13,13 +15,21 @@ import { useTheme } from './useTheme'
 
 const TOGGLE_COMMAND = 'toggle-recording'
 
+type Route = 'main' | 'settings' | 'jira'
+
+const TITLES: Partial<Record<Route, string>> = {
+  settings: 'Settings',
+  jira: 'Create Jira Ticket',
+}
+
 export function Popup() {
   const version = chrome.runtime?.getManifest?.().version ?? '0.0.0'
-  const [showSettings, setShowSettings] = useState(false)
+  const [route, setRoute] = useState<Route>('main')
 
   const settings = useSettings()
   const recorder = useRecorder()
   const environment = useEnvironment()
+  const jira = useJira()
   const shortcut = useShortcut(TOGGLE_COMMAND)
 
   useTheme(settings.settings.theme)
@@ -36,9 +46,9 @@ export function Popup() {
       <Header
         version={version}
         recording={recording}
-        title={showSettings ? 'Settings' : undefined}
-        onOpenSettings={() => setShowSettings(true)}
-        onBack={showSettings ? () => setShowSettings(false) : undefined}
+        title={TITLES[route]}
+        onOpenSettings={() => setRoute('settings')}
+        onBack={route === 'main' ? undefined : () => setRoute('main')}
       />
 
       {error ? (
@@ -47,8 +57,20 @@ export function Popup() {
         </div>
       ) : null}
 
-      {showSettings ? (
-        <SettingsView controller={settings} shortcut={shortcut} onOpenShortcuts={openShortcuts} />
+      {route === 'settings' ? (
+        <SettingsView
+          controller={settings}
+          jira={jira}
+          shortcut={shortcut}
+          onOpenShortcuts={openShortcuts}
+        />
+      ) : route === 'jira' ? (
+        <JiraView
+          jira={jira}
+          settings={settings}
+          snapshot={state?.snapshot ?? null}
+          onOpenSettings={() => setRoute('settings')}
+        />
       ) : state === null ? (
         <main className="flex flex-1 items-center justify-center px-4 py-6">
           <p className="text-xs text-ink-subtle">Loading</p>
@@ -62,7 +84,12 @@ export function Popup() {
           onFocusTab={recorder.focusTab}
         />
       ) : state.status === 'result' ? (
-        <ResultView state={state} pending={pending} onReset={recorder.reset} />
+        <ResultView
+          state={state}
+          pending={pending}
+          onReset={recorder.reset}
+          onCreateTicket={() => setRoute('jira')}
+        />
       ) : (
         <IdleView
           environment={environment}

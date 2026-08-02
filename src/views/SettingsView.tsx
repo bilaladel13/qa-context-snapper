@@ -5,8 +5,10 @@ import { SegmentedControl } from '@/components/SegmentedControl'
 import { TextInput } from '@/components/TextInput'
 import { Toggle } from '@/components/Toggle'
 import { MonitorIcon, MoonIcon, ResetIcon, SunIcon } from '@/components/icons'
+import { JiraConnectionCard } from '@/components/JiraConnectionCard'
 import { ENV_VAR_PATTERN } from '@/settings/schema'
 import type { Settings } from '@/settings/schema'
+import type { JiraController } from '@/popup/useJira'
 import type { SettingsController } from '@/popup/useSettings'
 
 interface GroupProps {
@@ -29,11 +31,12 @@ function Group({ title, children }: GroupProps) {
 
 interface SettingsViewProps {
   controller: SettingsController
+  jira: JiraController
   shortcut: string | null
   onOpenShortcuts: () => void
 }
 
-export function SettingsView({ controller, shortcut, onOpenShortcuts }: SettingsViewProps) {
+export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: SettingsViewProps) {
   const { settings, update, reset } = controller
 
   const setPlaywright = (patch: Partial<Settings['playwright']>) =>
@@ -220,6 +223,43 @@ export function SettingsView({ controller, shortcut, onOpenShortcuts }: Settings
             />
           </Field>
         </Group>
+
+        <section>
+          <h2 className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
+            Jira
+          </h2>
+          <JiraConnectionCard jira={jira} />
+        </section>
+
+        {jira.connection ? (
+          <Group title="Jira ticket contents">
+            <Field label="Attach Playwright script" hint="Adds the generated test as a syntax highlighted code block in the ticket description.">
+              <Toggle
+                label="Attach Playwright script"
+                checked={settings.jira.includePlaywrightScript}
+                onChange={(includePlaywrightScript) =>
+                  update((current) => ({
+                    ...current,
+                    jira: { ...current.jira, includePlaywrightScript },
+                  }))
+                }
+              />
+            </Field>
+
+            <Field label="Attach console errors" hint="Adds the captured console output. Turn off if your reports should not contain stack traces.">
+              <Toggle
+                label="Attach console errors"
+                checked={settings.jira.includeConsoleErrors}
+                onChange={(includeConsoleErrors) =>
+                  update((current) => ({
+                    ...current,
+                    jira: { ...current.jira, includeConsoleErrors },
+                  }))
+                }
+              />
+            </Field>
+          </Group>
+        ) : null}
 
         <Group title="Shortcut">
           <Field label="Toggle recording" hint="Starts or stops a recording without opening the popup. Chrome manages the key binding.">
