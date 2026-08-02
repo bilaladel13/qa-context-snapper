@@ -8,8 +8,10 @@ import { MAX_VALUE_LENGTH } from '@/shared/constants'
 import { captureEnvironment } from '@/shared/environment'
 import { collapse } from '@/shared/text'
 import type { ConsoleErrorEntry, InteractionEvent, InteractionType } from '@/types'
+import type { AssertionDetail, ElementTarget } from '@/types'
 import { CONSOLE_CHANNEL } from './bridge-protocol'
 import type { BridgeControl, BridgeMessage } from './bridge-protocol'
+import { closeInspector, isInspectorActive, isInspectorEvent, openInspector } from './inspector'
 import { configureTestIdAttributes, resolveTarget } from './locator'
 
 const INPUT_FLUSH_MS = 400
@@ -56,6 +58,12 @@ function elementFromEvent(event: Event): Element | null {
   const path = typeof event.composedPath === 'function' ? event.composedPath() : []
   const candidate = path[0] ?? event.target
   return candidate instanceof Element ? candidate : null
+}
+
+// While the inspector is picking a target, the page is being inspected rather
+// than used, so nothing it generates belongs in the recording.
+function shouldIgnore(event: Event): boolean {
+  return isInspectorActive() || isInspectorEvent(event)
 }
 
 function isSensitive(input: HTMLInputElement): boolean {
@@ -164,7 +172,7 @@ function noteNavigation(): void {
 
 function handleClick(event: MouseEvent): void {
   const element = elementFromEvent(event)
-  if (!element) {
+  if (!element || shouldIgnore(event)) {
     return
   }
 
@@ -174,7 +182,7 @@ function handleClick(event: MouseEvent): void {
 
 function handleInput(event: Event): void {
   const element = elementFromEvent(event)
-  if (!element || !session) {
+  if (!element || !session || shouldIgnore(event)) {
     return
   }
 
@@ -206,7 +214,7 @@ function handleInput(event: Event): void {
 
 function handleChange(event: Event): void {
   const element = elementFromEvent(event)
-  if (!element) {
+  if (!element || shouldIgnore(event)) {
     return
   }
 
@@ -229,7 +237,7 @@ function handleChange(event: Event): void {
 
 function handleSubmit(event: SubmitEvent): void {
   const form = event.target
-  if (!(form instanceof HTMLFormElement)) {
+  if (!(form instanceof HTMLFormElement) || shouldIgnore(event)) {
     return
   }
 
@@ -242,10 +250,33 @@ function handleKeydown(event: KeyboardEvent): void {
     return
   }
 
+  if (shouldIgnore(event)) {
+    return
+  }
+
   const element = elementFromEvent(event)
 
   noteNavigation()
   emit(makeEvent('keydown', element ? resolveTarget(element) : null, { key: event.key }))
+}
+
+function recordAssertion(target: ElementTarget | null, assertion: AssertionDetail): void {
+  if (!session) {
+    return
+  }
+
+  emit(makeEvent('assertion', target, { assertion }))
+}
+
+function setAssertionMode(active: boolean): boolean {
+  if (!session || !active) {
+    closeInspector()
+    return false
+  }
+
+  openInspector({ onAssert: recordAssertion, onExit: () => undefined })
+
+  return true
 }
 
 function handleBridgeMessage(event: MessageEvent): void {
@@ -315,6 +346,7 @@ function stopRecording(): void {
     return
   }
 
+  closeInspector()
   flushPendingInput()
 
   for (const dispose of session.teardown) {
@@ -354,7 +386,8 @@ function isContentRequest(value: unknown): value is ContentRequest {
   return (
     type === 'CONTENT_PING' ||
     type === 'CONTENT_START_RECORDING' ||
-    type === 'CONTENT_STOP_RECORDING'
+    type === 'CONTENT_STOP_RECORDING' ||
+    type === 'CONTENT_TOGGLE_ASSERTION_MODE'
   )
 }
 
@@ -366,6 +399,8 @@ function handleRequest(request: ContentRequest): ContentResponse {
     case 'CONTENT_STOP_RECORDING':
       stopRecording()
       break
+    case 'CONTENT_TOGGLE_ASSERTION_MODE':
+      return ok({ acknowledged: true, assertionMode: setAssertionMode(!isInspectorActive()) })
     case 'CONTENT_PING':
       break
   }

@@ -14,6 +14,7 @@ import { SHORTCUTS_PAGE, useShortcut } from './useShortcut'
 import { useTheme } from './useTheme'
 
 const TOGGLE_COMMAND = 'toggle-recording'
+const ASSERT_COMMAND = 'toggle-assertion-mode'
 
 type Route = 'main' | 'settings' | 'jira'
 
@@ -31,6 +32,7 @@ export function Popup() {
   const environment = useEnvironment()
   const jira = useJira()
   const shortcut = useShortcut(TOGGLE_COMMAND)
+  const assertShortcut = useShortcut(ASSERT_COMMAND)
 
   useTheme(settings.settings.theme)
 
@@ -80,8 +82,10 @@ export function Popup() {
           state={state}
           pending={pending}
           shortcut={shortcut}
+          assertShortcut={assertShortcut}
           onStop={recorder.stop}
           onFocusTab={recorder.focusTab}
+          onAddAssertion={recorder.startAssertion}
         />
       ) : state.status === 'result' ? (
         <ResultView

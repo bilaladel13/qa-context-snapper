@@ -37,11 +37,15 @@ export interface ActiveTabInfo extends PageInfo {
   blockedReason: string | null
 }
 
-export type PopupQuery = { type: 'GET_ACTIVE_TAB' } | { type: 'FOCUS_RECORDED_TAB' }
+export type PopupQuery =
+  | { type: 'GET_ACTIVE_TAB' }
+  | { type: 'FOCUS_RECORDED_TAB' }
+  | { type: 'TOGGLE_ASSERTION_MODE' }
 
 export interface PopupQueryResponseMap {
   GET_ACTIVE_TAB: ActiveTabInfo
   FOCUS_RECORDED_TAB: { focused: boolean }
+  TOGGLE_ASSERTION_MODE: { assertionMode: boolean }
 }
 
 export type JiraRequest =
@@ -102,11 +106,13 @@ export type ContentRequest =
   | { type: 'CONTENT_PING' }
   | { type: 'CONTENT_START_RECORDING'; sessionId: string }
   | { type: 'CONTENT_STOP_RECORDING'; sessionId: string }
+  | { type: 'CONTENT_TOGGLE_ASSERTION_MODE' }
 
 export interface ContentResponseMap {
   CONTENT_PING: { acknowledged: true }
   CONTENT_START_RECORDING: { acknowledged: true }
   CONTENT_STOP_RECORDING: { acknowledged: true }
+  CONTENT_TOGGLE_ASSERTION_MODE: { acknowledged: true; assertionMode: boolean }
 }
 
 export type ContentResponse = Result<ContentResponseMap[ContentRequest['type']]>
@@ -150,7 +156,11 @@ const POPUP_REQUEST_TYPES = new Set([
   'RESET_RECORDING',
 ])
 
-const POPUP_QUERY_TYPES = new Set(['GET_ACTIVE_TAB', 'FOCUS_RECORDED_TAB'])
+const POPUP_QUERY_TYPES = new Set([
+  'GET_ACTIVE_TAB',
+  'FOCUS_RECORDED_TAB',
+  'TOGGLE_ASSERTION_MODE',
+])
 
 export function isPopupRequest(value: unknown): value is PopupRequest {
   if (typeof value !== 'object' || value === null) {

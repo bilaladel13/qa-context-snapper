@@ -7,9 +7,36 @@ const TYPE_LABELS: Record<InteractionEvent['type'], string> = {
   submit: 'submit',
   keydown: 'press',
   navigation: 'goto',
+  assertion: 'expect',
+}
+
+const ASSERTION_LABELS: Record<string, string> = {
+  visible: 'is visible',
+  hidden: 'is hidden',
+  text: 'contains',
+  exactText: 'has text',
+  value: 'has value',
+  enabled: 'is enabled',
+  disabled: 'is disabled',
+  checked: 'is checked',
+  unchecked: 'is not checked',
+  count: 'has count',
+  attribute: 'has attribute',
+  url: 'page url is',
+  title: 'page title is',
 }
 
 function describeTarget(step: InteractionEvent): string {
+  if (step.type === 'assertion') {
+    const detail = step.assertion
+    const subject = step.target?.value ?? 'page'
+    const check = ASSERTION_LABELS[detail?.kind ?? ''] ?? 'check'
+
+    return detail?.kind === 'url' || detail?.kind === 'title'
+      ? `${check} ${detail.expected ?? ''}`
+      : `${subject} ${check}`
+  }
+
   if (step.type === 'navigation') {
     try {
       const url = new URL(step.value ?? '')

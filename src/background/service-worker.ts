@@ -215,8 +215,29 @@ async function handlePopupRequest(request: PopupRequest): Promise<PopupResponse>
   }
 }
 
+async function toggleAssertionMode(): Promise<Result<{ assertionMode: boolean }>> {
+  const state = await getState()
+
+  if (state.status !== 'recording' || state.tabId === null) {
+    return fail('Start a recording before adding assertions.')
+  }
+
+  const response = await sendToTab(state.tabId, { type: 'CONTENT_TOGGLE_ASSERTION_MODE' })
+
+  return response.ok
+    ? ok({ assertionMode: response.data.assertionMode })
+    : fail('The recorded page did not respond. Reload it and start again.')
+}
+
 function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
-  return query.type === 'GET_ACTIVE_TAB' ? describeActiveTab() : focusRecordedTab()
+  switch (query.type) {
+    case 'GET_ACTIVE_TAB':
+      return describeActiveTab()
+    case 'FOCUS_RECORDED_TAB':
+      return focusRecordedTab()
+    case 'TOGGLE_ASSERTION_MODE':
+      return toggleAssertionMode()
+  }
 }
 
 async function handleContentMessage(
@@ -316,6 +337,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 })
 
 chrome.commands?.onCommand.addListener((command) => {
+  if (command === 'toggle-assertion-mode') {
+    void toggleAssertionMode()
+    return
+  }
+
   if (command !== 'toggle-recording') {
     return
   }

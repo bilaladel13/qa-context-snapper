@@ -1,6 +1,6 @@
 import { Button } from '@/components/Button'
 import { Section } from '@/components/Section'
-import { ExternalIcon, StopIcon } from '@/components/icons'
+import { ExternalIcon, StopIcon, TargetIcon } from '@/components/icons'
 import { useElapsed } from '@/popup/useElapsed'
 import type { RecorderState } from '@/types'
 
@@ -8,11 +8,21 @@ interface RecordingViewProps {
   state: RecorderState
   pending: boolean
   shortcut: string | null
+  assertShortcut: string | null
   onStop: () => void
   onFocusTab: () => void
+  onAddAssertion: () => void
 }
 
-export function RecordingView({ state, pending, shortcut, onStop, onFocusTab }: RecordingViewProps) {
+export function RecordingView({
+  state,
+  pending,
+  shortcut,
+  assertShortcut,
+  onStop,
+  onFocusTab,
+  onAddAssertion,
+}: RecordingViewProps) {
   const elapsed = useElapsed(state.startedAt)
 
   return (
@@ -47,6 +57,25 @@ export function RecordingView({ state, pending, shortcut, onStop, onFocusTab }: 
           </Section>
 
           <Button
+            onClick={onAddAssertion}
+            className="w-full py-2 text-xs"
+            icon={<TargetIcon className="size-3.5" />}
+          >
+            Add assertion
+          </Button>
+
+          <p className="text-center text-[11px] leading-relaxed text-ink-subtle">
+            Picks an element on the page to check. A test that only watches for console errors
+            passes even when the bug is silent.
+            {assertShortcut ? (
+              <>
+                {' '}
+                Shortcut <span className="font-mono text-ink-muted">{assertShortcut}</span>.
+              </>
+            ) : null}
+          </p>
+
+          <Button
             variant="ghost"
             onClick={onFocusTab}
             className="w-full py-2 text-xs"
@@ -54,10 +83,6 @@ export function RecordingView({ state, pending, shortcut, onStop, onFocusTab }: 
           >
             Go to recorded tab
           </Button>
-
-          <p className="text-center text-[11px] leading-relaxed text-ink-subtle">
-            Reproduce the issue on the page. Closing this popup does not stop the recording.
-          </p>
         </div>
       </main>
 

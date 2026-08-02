@@ -32,7 +32,35 @@ export interface ConsoleErrorEntry {
   timestamp: number
 }
 
-export type InteractionType = 'click' | 'input' | 'change' | 'submit' | 'keydown' | 'navigation'
+export type InteractionType =
+  | 'click'
+  | 'input'
+  | 'change'
+  | 'submit'
+  | 'keydown'
+  | 'navigation'
+  | 'assertion'
+
+export type AssertionKind =
+  | 'visible'
+  | 'hidden'
+  | 'text'
+  | 'exactText'
+  | 'value'
+  | 'enabled'
+  | 'disabled'
+  | 'checked'
+  | 'unchecked'
+  | 'count'
+  | 'attribute'
+  | 'url'
+  | 'title'
+
+export interface AssertionDetail {
+  kind: AssertionKind
+  expected?: string
+  attribute?: string
+}
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'
 
@@ -65,6 +93,9 @@ export interface InteractionEvent {
   value?: string
   masked?: boolean
   key?: string
+  // Present only when type is 'assertion'. Assertions share the interaction
+  // stream so they stay in order with the steps they follow.
+  assertion?: AssertionDetail
   url: string
   timestamp: number
 }

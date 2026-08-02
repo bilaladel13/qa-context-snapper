@@ -41,6 +41,13 @@
         "mac": "Command+Shift+U"
       },
       "description": "Start or stop a QA Context Snapper recording"
+    },
+    "toggle-assertion-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Pick an element to assert on while recording"
     }
   }
 }
