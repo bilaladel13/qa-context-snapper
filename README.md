@@ -74,6 +74,7 @@ because the worker is executing DOM code. `npm run verify:build` asserts the wir
 | `npm run verify:build`    | Assert the loaders point at the right chunks        |
 | `npm run verify:bridge`   | Prove the MAIN world console bridge still serializes |
 | `npm run verify:locator`  | Run locator resolution against a jsdom page         |
+| `npm run verify:assertions` | Check which assertions each kind of element offers |
 | `npm run verify:jira`     | Validate the generated Atlassian Document Format    |
 | `npm run preview:report`  | Render a sample report and syntax-check the script  |
 | `npm run zip`             | Build and package `dist/` into `release/*.zip`      |
@@ -262,6 +263,40 @@ port. With relative navigation on, only the recording's own origin becomes a pat
 follows `baseURL` from `playwright.config.ts`. A URL on any other origin stays absolute, because
 `baseURL` cannot cover both, and the header comment names the origin to configure.
 
+### Assertions
+
+A recording that only watches for console errors passes on any bug that fails silently, which is
+most of them. An invalid email accepted without complaint logs nothing.
+
+While recording, "Add assertion" (or the shortcut) opens an inspector in the page itself. Hovering
+highlights elements, clicking one opens a panel of assertions that apply to it, and the expected
+value is read straight off the element so it is already filled in. A context menu was the obvious
+alternative and was rejected for exactly that reason: it cannot show you the text or value you are
+about to assert against.
+
+Covered: visibility, presence and absence, contained and exact text, input value, enabled and
+disabled, checked state, element count, any meaningful attribute, page URL and page title. What is
+offered depends on the element, so a checkbox does not offer a text value and a container does not
+offer its whole subtree as text. Volatile attributes such as `class` and `style` are never offered,
+because asserting on them produces tests that break on unrelated styling changes.
+
+The overlay lives in a shadow root, so page CSS cannot reach it and its own clicks are identifiable.
+Picking runs in the capture phase with propagation stopped, so choosing a target never triggers the
+page's own handler and is never recorded as a click.
+
+Assertions share the interaction stream rather than a list of their own, which keeps them ordered
+against the steps they follow. They become `expect()` calls:
+
+```ts
+await expect(page.getByRole('alert')).toBeVisible();
+await expect(page.getByTestId('error-text')).toHaveText('Enter a valid email address');
+await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+await expect(page.getByTestId('row')).toHaveCount(3);
+```
+
+A count assertion is about the whole set, so it is the one case where the strict mode `.nth()` index
+is deliberately left off.
+
 ### Jira integration
 
 Connect a Jira Cloud site in settings with a site address, account email and API token. The token is
@@ -370,6 +405,7 @@ The `@` alias maps to `src/`.
 - [x] Keyboard shortcut and recording badge
 - [x] Strict mode safe locators and relative navigation
 - [x] Jira Cloud ticket creation
+- [x] Manual assertion capture with an in page inspector
 - [ ] Screenshot attachment
 - [ ] Follow recordings across newly opened tabs
 
