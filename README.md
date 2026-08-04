@@ -41,6 +41,7 @@ Press stop and three artefacts exist at once, from one recording:
 
 - **Smart Locator Ladder** — resolves ambiguous elements by *identity*, not position. Details below.
 - **Assertion inspector** — hover, click, and pick what to assert. Values are read live off the page.
+- **Name phases while recording** — they become `test.step` groups, report headings and Jira sections.
 - **Visual context** — a screenshot taken the moment you stop, previewed before it is attached.
 - **Console capture that actually works** — including errors thrown by the page's own scripts.
 - **Survives navigation** — a recording continues across full page loads and logins.

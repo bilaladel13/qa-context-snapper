@@ -42,12 +42,14 @@ export type PopupQuery =
   | { type: 'FOCUS_RECORDED_TAB' }
   | { type: 'TOGGLE_ASSERTION_MODE' }
   | { type: 'GET_SCREENSHOT' }
+  | { type: 'ADD_STEP_MARKER' }
 
 export interface PopupQueryResponseMap {
   GET_ACTIVE_TAB: ActiveTabInfo
   FOCUS_RECORDED_TAB: { focused: boolean }
   TOGGLE_ASSERTION_MODE: { assertionMode: boolean }
   GET_SCREENSHOT: { dataUrl: string | null }
+  ADD_STEP_MARKER: { prompted: boolean }
 }
 
 export type JiraRequest =
@@ -109,12 +111,14 @@ export type ContentRequest =
   | { type: 'CONTENT_START_RECORDING'; sessionId: string }
   | { type: 'CONTENT_STOP_RECORDING'; sessionId: string }
   | { type: 'CONTENT_TOGGLE_ASSERTION_MODE' }
+  | { type: 'CONTENT_PROMPT_STEP_MARKER' }
 
 export interface ContentResponseMap {
   CONTENT_PING: { acknowledged: true }
   CONTENT_START_RECORDING: { acknowledged: true }
   CONTENT_STOP_RECORDING: { acknowledged: true }
   CONTENT_TOGGLE_ASSERTION_MODE: { acknowledged: true; assertionMode: boolean }
+  CONTENT_PROMPT_STEP_MARKER: { acknowledged: true; prompted: boolean }
 }
 
 export type ContentResponse = Result<ContentResponseMap[ContentRequest['type']]>
@@ -163,6 +167,7 @@ const POPUP_QUERY_TYPES = new Set([
   'FOCUS_RECORDED_TAB',
   'TOGGLE_ASSERTION_MODE',
   'GET_SCREENSHOT',
+  'ADD_STEP_MARKER',
 ])
 
 export function isPopupRequest(value: unknown): value is PopupRequest {

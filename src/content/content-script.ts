@@ -12,6 +12,7 @@ import type { AssertionDetail, ElementTarget } from '@/types'
 import { CONSOLE_CHANNEL } from './bridge-protocol'
 import type { BridgeControl, BridgeMessage } from './bridge-protocol'
 import { closeInspector, isInspectorActive, isInspectorEvent, openInspector } from './inspector'
+import { closeStepPrompt, isPromptEvent, isPromptOpen, openStepPrompt } from './prompt'
 import { configureTestIdAttributes, resolveTarget } from './locator'
 
 const INPUT_FLUSH_MS = 400
@@ -63,7 +64,12 @@ function elementFromEvent(event: Event): Element | null {
 // While the inspector is picking a target, the page is being inspected rather
 // than used, so nothing it generates belongs in the recording.
 function shouldIgnore(event: Event): boolean {
-  return isInspectorActive() || isInspectorEvent(event)
+  return (
+    isInspectorActive() ||
+    isInspectorEvent(event) ||
+    isPromptOpen() ||
+    isPromptEvent(event)
+  )
 }
 
 function isSensitive(input: HTMLInputElement): boolean {
@@ -268,6 +274,16 @@ function recordAssertion(target: ElementTarget | null, assertion: AssertionDetai
   emit(makeEvent('assertion', target, { assertion }))
 }
 
+function promptForStepMarker(): boolean {
+  if (!session) {
+    return false
+  }
+
+  openStepPrompt((label) => emit(makeEvent('marker', null, { value: label })))
+
+  return true
+}
+
 function setAssertionMode(active: boolean): boolean {
   if (!session || !active) {
     closeInspector()
@@ -347,6 +363,7 @@ function stopRecording(): void {
   }
 
   closeInspector()
+  closeStepPrompt()
   flushPendingInput()
 
   for (const dispose of session.teardown) {
@@ -387,7 +404,8 @@ function isContentRequest(value: unknown): value is ContentRequest {
     type === 'CONTENT_PING' ||
     type === 'CONTENT_START_RECORDING' ||
     type === 'CONTENT_STOP_RECORDING' ||
-    type === 'CONTENT_TOGGLE_ASSERTION_MODE'
+    type === 'CONTENT_TOGGLE_ASSERTION_MODE' ||
+    type === 'CONTENT_PROMPT_STEP_MARKER'
   )
 }
 
@@ -401,6 +419,8 @@ function handleRequest(request: ContentRequest): ContentResponse {
       break
     case 'CONTENT_TOGGLE_ASSERTION_MODE':
       return ok({ acknowledged: true, assertionMode: setAssertionMode(!isInspectorActive()) })
+    case 'CONTENT_PROMPT_STEP_MARKER':
+      return ok({ acknowledged: true, prompted: promptForStepMarker() })
     case 'CONTENT_PING':
       break
   }

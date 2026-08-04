@@ -40,6 +40,9 @@ export type InteractionType =
   | 'keydown'
   | 'navigation'
   | 'assertion'
+  // A named boundary the tester inserts while recording. Carries no action of
+  // its own; it exists to divide the run into phases that can be read later.
+  | 'marker'
 
 export type AssertionKind =
   | 'visible'

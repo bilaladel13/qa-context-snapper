@@ -62,14 +62,34 @@ function consoleSection(errors: ConsoleErrorEntry[]): string[] {
   return lines
 }
 
+// Numbering runs unbroken across named phases, so a comment can still refer to
+// "step 7" while the reader sees which phase it belongs to.
+function numberedSteps(interactions: ContextSnapshot['interactions']): string[] {
+  const lines: string[] = []
+  let number = 0
+
+  for (const step of interactions) {
+    if (step.type === 'marker') {
+      if (lines.length > 0) {
+        lines.push('')
+      }
+
+      lines.push(`**${describeStep(step)}**`, '')
+      continue
+    }
+
+    number += 1
+    lines.push(`${number}. ${describeStep(step)}`)
+  }
+
+  return lines
+}
+
 export function generateMarkdownReport(snapshot: ContextSnapshot): string {
   const { environment, interactions, consoleErrors } = snapshot
   const finalUrl = interactions[interactions.length - 1]?.url ?? environment.pageUrl
 
-  const steps =
-    interactions.length > 0
-      ? interactions.map((step, index) => `${index + 1}. ${describeStep(step)}`)
-      : ['No interactions were captured.']
+  const steps = interactions.length > 0 ? numberedSteps(interactions) : ['No interactions were captured.']
 
   const lines = [
     `# Bug report: ${environment.pageTitle || environment.pageUrl}`,

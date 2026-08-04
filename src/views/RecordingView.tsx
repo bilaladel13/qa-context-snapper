@@ -1,6 +1,6 @@
 import { Button } from '@/components/Button'
 import { Section } from '@/components/Section'
-import { ExternalIcon, StopIcon, TargetIcon } from '@/components/icons'
+import { BookmarkIcon, ExternalIcon, StopIcon, TargetIcon } from '@/components/icons'
 import { useElapsed } from '@/popup/useElapsed'
 import type { RecorderState } from '@/types'
 
@@ -12,6 +12,7 @@ interface RecordingViewProps {
   onStop: () => void
   onFocusTab: () => void
   onAddAssertion: () => void
+  onAddStepMarker: () => void
 }
 
 export function RecordingView({
@@ -22,6 +23,7 @@ export function RecordingView({
   onStop,
   onFocusTab,
   onAddAssertion,
+  onAddStepMarker,
 }: RecordingViewProps) {
   const elapsed = useElapsed(state.startedAt)
 
@@ -56,13 +58,23 @@ export function RecordingView({
             </dl>
           </Section>
 
-          <Button
-            onClick={onAddAssertion}
-            className="w-full py-2 text-xs"
-            icon={<TargetIcon className="size-3.5" />}
-          >
-            Add assertion
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={onAddAssertion}
+              className="flex-1 py-2 text-xs"
+              icon={<TargetIcon className="size-3.5" />}
+            >
+              Add assertion
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onAddStepMarker}
+              className="flex-1 py-2 text-xs"
+              icon={<BookmarkIcon className="size-3.5" />}
+            >
+              Name a step
+            </Button>
+          </div>
 
           <p className="text-center text-[11px] leading-relaxed text-ink-subtle">
             Picks an element on the page to check. A test that only watches for console errors

@@ -241,6 +241,20 @@ async function toggleAssertionMode(): Promise<Result<{ assertionMode: boolean }>
     : fail('The recorded page did not respond. Reload it and start again.')
 }
 
+async function promptStepMarker(): Promise<Result<{ prompted: boolean }>> {
+  const state = await getState()
+
+  if (state.status !== 'recording' || state.tabId === null) {
+    return fail('Start a recording before naming a step.')
+  }
+
+  const response = await sendToTab(state.tabId, { type: 'CONTENT_PROMPT_STEP_MARKER' })
+
+  return response.ok
+    ? ok({ prompted: response.data.prompted })
+    : fail('The recorded page did not respond. Reload it and start again.')
+}
+
 async function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
   switch (query.type) {
     case 'GET_ACTIVE_TAB':
@@ -251,6 +265,8 @@ async function handlePopupQuery(query: PopupQuery): Promise<Result<unknown>> {
       return toggleAssertionMode()
     case 'GET_SCREENSHOT':
       return ok({ dataUrl: await readScreenshot() })
+    case 'ADD_STEP_MARKER':
+      return promptStepMarker()
   }
 }
 
@@ -353,6 +369,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.commands?.onCommand.addListener((command) => {
   if (command === 'toggle-assertion-mode') {
     void toggleAssertionMode()
+    return
+  }
+
+  if (command === 'add-step-marker') {
+    void promptStepMarker()
     return
   }
 

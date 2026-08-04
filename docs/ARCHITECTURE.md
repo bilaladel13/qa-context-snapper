@@ -340,6 +340,22 @@ assertion added and then clears, so it cannot silently carry over. Left blank, t
 is generated. The reason also appears in the Markdown report and the Jira ticket, where it reads as
 the purpose of the check.
 
+### Named steps
+
+`test.step` is worth having: the Playwright report shows steps as collapsible groups and names the
+failing one, so a red CI run says which phase broke rather than which line. The first implementation
+did not earn that, because it grouped only on navigation. A single page recording produced one
+wrapper called "Initial page" around everything, which is nesting with no information in it.
+
+Phases are now named by the tester while recording, through a prompt rendered in the page rather
+than the popup, since opening the popup means leaving the flow being recorded. A marker carries no
+action of its own; it exists to divide the run.
+
+Grouping falls back in order: names given during the recording, then the pages moved through, and a
+single group is emitted flat rather than as an empty wrapper. Markers also shape the Markdown
+report and the Jira description, where they become subheadings with the step numbering carried
+across them, so a comment can still refer to "step 7".
+
 ### Jira integration
 
 Connect a Jira Cloud site in settings with a site address, account email and API token. The token is

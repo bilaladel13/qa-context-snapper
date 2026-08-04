@@ -141,6 +141,12 @@ function statement(
 ): string[] {
   const q = (input: string) => quote(input, options.quoteStyle)
 
+  // A marker is a boundary, not an action. It shapes the grouping and emits
+  // nothing of its own.
+  if (step.type === 'marker') {
+    return []
+  }
+
   if (step.type === 'assertion') {
     return assertion(step, options, toUrl)
   }
@@ -198,21 +204,60 @@ function dedupeNavigation(steps: InteractionEvent[]): InteractionEvent[] {
   })
 }
 
-// A step boundary is any navigation, so test.step groups map onto the pages the
-// tester actually moved through.
-function groupIntoSteps(steps: InteractionEvent[]): { title: string; steps: InteractionEvent[] }[] {
-  const groups: { title: string; steps: InteractionEvent[] }[] = []
+export interface StepGroup {
+  title: string
+  steps: InteractionEvent[]
+}
+
+// Names the tester gave while recording beat anything inferred, because they
+// describe intent rather than mechanics.
+function groupByMarkers(steps: InteractionEvent[]): StepGroup[] {
+  const groups: StepGroup[] = []
+  let current: StepGroup = { title: 'Setup', steps: [] }
+
+  for (const step of steps) {
+    if (step.type === 'marker') {
+      if (current.steps.length > 0) {
+        groups.push(current)
+      }
+
+      current = { title: step.value || 'Step', steps: [] }
+      continue
+    }
+
+    current.steps.push(step)
+  }
+
+  if (current.steps.length > 0) {
+    groups.push(current)
+  }
+
+  return groups
+}
+
+// The fallback when nobody named anything: pages moved through are the only
+// boundary the recording knows about.
+function groupByNavigation(steps: InteractionEvent[]): StepGroup[] {
+  const groups: StepGroup[] = []
 
   for (const step of steps) {
     if (step.type === 'navigation' || groups.length === 0) {
-      const title = step.type === 'navigation' ? `Go to ${shortUrl(step.value ?? '')}` : 'Initial page'
-      groups.push({ title, steps: [] })
+      groups.push({
+        title: step.type === 'navigation' ? `Go to ${shortUrl(step.value ?? '')}` : 'Reproduce',
+        steps: [],
+      })
     }
 
     groups[groups.length - 1]?.steps.push(step)
   }
 
   return groups.filter((group) => group.steps.length > 0)
+}
+
+export function groupSteps(steps: InteractionEvent[]): StepGroup[] {
+  return steps.some((step) => step.type === 'marker')
+    ? groupByMarkers(steps)
+    : groupByNavigation(steps)
 }
 
 function shortUrl(url: string): string {
@@ -280,8 +325,13 @@ export function generatePlaywrightScript(
     (step, index) => !(index === 0 && step.type === 'navigation' && step.value === startUrl),
   )
 
-  if (options.structure === 'steps') {
-    for (const group of groupIntoSteps(body)) {
+  const groups = options.structure === 'steps' ? groupSteps(body) : []
+
+  // A single group is a wrapper with nothing to distinguish it from the test
+  // body, so it is emitted flat. That is exactly what a one page recording
+  // produced before markers existed, and it read as pure noise.
+  if (groups.length > 1) {
+    for (const group of groups) {
       const inner = group.steps.flatMap((step) => statement(step, options, toUrl))
       if (inner.length === 0) continue
 

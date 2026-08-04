@@ -88,6 +88,7 @@ export function Popup() {
           onStop={recorder.stop}
           onFocusTab={recorder.focusTab}
           onAddAssertion={recorder.startAssertion}
+          onAddStepMarker={recorder.addStepMarker}
         />
       ) : state.status === 'result' ? (
         <ResultView

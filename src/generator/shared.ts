@@ -159,6 +159,8 @@ function describeClaim(step: InteractionEvent): string {
 
 export function describeStep(step: InteractionEvent): string {
   switch (step.type) {
+    case 'marker':
+      return step.value ?? 'Step'
     case 'assertion':
       return describeAssertion(step)
     case 'navigation':

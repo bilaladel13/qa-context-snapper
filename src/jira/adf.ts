@@ -65,11 +65,42 @@ function table(rows: [string, string][]): AdfNode {
   }
 }
 
-function orderedList(items: string[]): AdfNode {
+function orderedList(items: string[], start = 1): AdfNode {
   return {
     type: 'orderedList',
+    ...(start > 1 ? { attrs: { order: start } } : {}),
     content: items.map((item) => ({ type: 'listItem', content: [paragraph(item)] })),
   }
+}
+
+// Named phases become subheadings with the numbering carried across them, so a
+// long reproduction reads as a few labelled stages rather than one long list.
+function stepNodes(interactions: ContextSnapshot['interactions']): AdfNode[] {
+  const nodes: AdfNode[] = []
+  let pending: string[] = []
+  let next = 1
+
+  const flush = () => {
+    if (pending.length > 0) {
+      nodes.push(orderedList(pending, next))
+      next += pending.length
+      pending = []
+    }
+  }
+
+  for (const step of interactions) {
+    if (step.type === 'marker') {
+      flush()
+      nodes.push(heading(3, describeStep(step)))
+      continue
+    }
+
+    pending.push(describeStep(step))
+  }
+
+  flush()
+
+  return nodes
 }
 
 // ADF has no concept of a newline inside a paragraph, so typed line breaks
@@ -154,9 +185,9 @@ export function buildDescription(
       ['Recording length', formatDuration(snapshot.startedAt, snapshot.stoppedAt)],
     ]),
     heading(2, 'Steps to reproduce'),
-    interactions.length > 0
-      ? orderedList(interactions.map(describeStep))
-      : paragraph('No interactions were captured.'),
+    ...(interactions.length > 0
+      ? stepNodes(interactions)
+      : [paragraph('No interactions were captured.')]),
   ]
 
   if (options.includeConsoleErrors !== false) {

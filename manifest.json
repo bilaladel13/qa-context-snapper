@@ -48,6 +48,13 @@
         "mac": "Command+Shift+E"
       },
       "description": "Pick an element to assert on while recording"
+    },
+    "add-step-marker": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Name the next phase of the recording"
     }
   }
 }

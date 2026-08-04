@@ -8,6 +8,7 @@ const TYPE_LABELS: Record<InteractionEvent['type'], string> = {
   keydown: 'press',
   navigation: 'goto',
   assertion: 'expect',
+  marker: 'step',
 }
 
 const ASSERTION_LABELS: Record<string, string> = {
@@ -70,20 +71,29 @@ export function StepsPanel({ steps }: StepsPanelProps) {
 
   return (
     <ol className="max-h-36 space-y-1 overflow-y-auto">
-      {steps.map((step, index) => (
-        <li key={step.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
-          <span className="w-4 shrink-0 text-right font-mono text-ink-subtle">{index + 1}</span>
-          <span className="shrink-0 font-mono font-semibold text-accent">
-            {TYPE_LABELS[step.type]}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-ink-muted">
-            {describeTarget(step)}
-            {step.value && step.type !== 'navigation' ? (
-              <span className={step.masked ? 'text-warn-ink' : 'text-ink'}> = {step.value}</span>
-            ) : null}
-          </span>
-        </li>
-      ))}
+      {steps.map((step, index) =>
+        step.type === 'marker' ? (
+          <li
+            key={step.id}
+            className="mt-2 border-t border-surface-border pt-2 text-[11px] font-semibold text-ink first:mt-0 first:border-0 first:pt-0"
+          >
+            {step.value}
+          </li>
+        ) : (
+          <li key={step.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
+            <span className="w-4 shrink-0 text-right font-mono text-ink-subtle">{index + 1}</span>
+            <span className="shrink-0 font-mono font-semibold text-accent">
+              {TYPE_LABELS[step.type]}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ink-muted">
+              {describeTarget(step)}
+              {step.value && step.type !== 'navigation' ? (
+                <span className={step.masked ? 'text-warn-ink' : 'text-ink'}> = {step.value}</span>
+              ) : null}
+            </span>
+          </li>
+        ),
+      )}
     </ol>
   )
 }

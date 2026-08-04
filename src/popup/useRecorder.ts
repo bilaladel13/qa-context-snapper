@@ -13,6 +13,7 @@ export interface Recorder {
   reset: () => void
   focusTab: () => void
   startAssertion: () => void
+  addStepMarker: () => void
   dismissError: () => void
 }
 
@@ -76,6 +77,18 @@ export function useRecorder(): Recorder {
     })
   }, [])
 
+  // Same reason as the inspector: the naming prompt lives in the page, and the
+  // popup has to yield focus for it to be usable.
+  const addStepMarker = useCallback(() => {
+    void queryBackground({ type: 'ADD_STEP_MARKER' }).then((response) => {
+      if (response.ok) {
+        window.close()
+      } else if (mounted.current) {
+        setError(response.error)
+      }
+    })
+  }, [])
+
   const focusTab = useCallback(() => {
     void queryBackground({ type: 'FOCUS_RECORDED_TAB' }).then((response) => {
       if (response.ok) {
@@ -95,6 +108,7 @@ export function useRecorder(): Recorder {
     reset: useCallback(() => void dispatch({ type: 'RESET_RECORDING' }), [dispatch]),
     focusTab,
     startAssertion,
+    addStepMarker,
     dismissError: useCallback(() => setError(null), []),
   }
 }

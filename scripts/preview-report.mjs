@@ -373,6 +373,67 @@ checks.push(
   ['the resilient script parses', parses(resilient) === null],
 )
 
+// Named phases inserted while recording, on a single page with no navigation.
+const marker = (label, id) => ({
+  id,
+  type: 'marker',
+  target: null,
+  value: label,
+  url: 'x',
+  timestamp: at(0),
+})
+
+const click = (id, value) => ({
+  id,
+  type: 'click',
+  target: target({ strategy: 'testId', value, tagName: 'button', cssSelector: '#' + value }),
+  url: 'x',
+  timestamp: at(0),
+})
+
+const markedSnapshot = {
+  ...assertionSnapshot,
+  sessionId: 'marked',
+  interactions: [
+    { id: 'm0', type: 'navigation', target: null, value: 'https://shop.example.com/signup', url: 'x', timestamp: at(0) },
+    // Done before any phase was named, so it belongs to an implicit Setup.
+    click('m0b', 'cookie-accept'),
+    marker('Register with an invalid email', 'm1'),
+    click('m2', 'email-input'),
+    click('m3', 'submit'),
+    marker('The form rejects it', 'm4'),
+    assert('visible', { target: target({ strategy: 'testId', value: 'email-error', tagName: 'p', cssSelector: '.err' }) }),
+  ],
+}
+
+// The same single page run with nobody naming anything.
+const unmarkedSnapshot = {
+  ...markedSnapshot,
+  sessionId: 'unmarked',
+  interactions: markedSnapshot.interactions.filter((step) => step.type !== 'marker'),
+}
+
+const grouped = generatePlaywrightScript(markedSnapshot, { ...DEFAULTS, structure: 'steps' })
+const ungrouped = generatePlaywrightScript(unmarkedSnapshot, { ...DEFAULTS, structure: 'steps' })
+const markedFlat = generatePlaywrightScript(markedSnapshot, { ...DEFAULTS, structure: 'flat' })
+
+show('\n--- named steps ---\n')
+show(grouped + '\n')
+
+checks.push(
+  ['a named phase becomes a test.step', grouped.includes("await test.step('Register with an invalid email', async () => {")],
+  ['every name is used', grouped.includes("await test.step('The form rejects it', async () => {")],
+  ['work before the first name is kept', grouped.includes("await test.step('Setup', async () => {")],
+  ['a marker emits no action of its own', !grouped.includes('marker')],
+  // The reason the option felt like filler: one page, no navigation, so the
+  // old grouping produced a single wrapper called Initial page.
+  ['an unnamed single page run stays flat', !ungrouped.includes('test.step')],
+  ['and still emits its actions', ungrouped.includes(".getByTestId('submit').click()")],
+  ['flat output ignores names entirely', !markedFlat.includes('test.step')],
+  ['grouped output parses', parses(grouped) === null],
+  ['ungrouped output parses', parses(ungrouped) === null],
+)
+
 const asserted = generatePlaywrightScript(assertionSnapshot, DEFAULTS)
 
 show('\n--- assertions ---\n')

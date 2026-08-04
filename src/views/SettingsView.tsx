@@ -82,7 +82,7 @@ export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: Se
 
           <Field
             label="Structure"
-            hint="Flat lists every action in one block. Steps wraps each page in test.step(), which shows as collapsible groups in the Playwright report."
+            hint="Grouped wraps each named phase in test.step(), which the Playwright report shows as collapsible groups and names in a failure, so a red run says which phase broke rather than which line. Phases come from the names you give while recording; without any it falls back to the pages you moved through, and a single group is emitted flat rather than as an empty wrapper."
             stacked
           >
             <SegmentedControl
@@ -92,7 +92,7 @@ export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: Se
               onChange={(structure) => setPlaywright({ structure })}
               options={[
                 { value: 'flat', label: 'Flat' },
-                { value: 'steps', label: 'test.step' },
+                { value: 'steps', label: 'Grouped' },
               ]}
             />
           </Field>
