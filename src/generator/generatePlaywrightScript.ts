@@ -314,6 +314,26 @@ export function generatePlaywrightScript(
     )
   }
 
+  const networkFailures = (snapshot.network ?? []).filter((entry) => entry.outcome !== 'success')
+
+  if (options.includeNetworkAssertion && networkFailures.length > 0) {
+    lines.push(
+      `  const failedRequests: string[] = [];`,
+      '',
+      // status() >= 400 rather than ok(), which also rejects the redirects
+      // Playwright follows on the way to a successful response.
+      `  page.on(${q('response')}, (response) => {`,
+      `    if (response.status() >= 400) {`,
+      `      failedRequests.push(\`\${response.status()} \${response.request().method()} \${response.url()}\`);`,
+      `    }`,
+      `  });`,
+      `  page.on(${q('requestfailed')}, (request) => {`,
+      `    failedRequests.push(\`failed \${request.method()} \${request.url()}\`);`,
+      `  });`,
+      '',
+    )
+  }
+
   const viewport = options.setViewport ? parseViewport(environment.viewportSize) : null
   if (viewport) {
     lines.push(`  await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });`)
@@ -358,6 +378,21 @@ export function generatePlaywrightScript(
       )
     }
     lines.push(`  expect(consoleErrors, ${q('the page should log no console errors')}).toEqual([]);`)
+  }
+
+  if (options.includeNetworkAssertion && networkFailures.length > 0) {
+    if (options.includeComments) {
+      const sample = networkFailures[0]
+
+      lines.push(
+        '',
+        `  // The recording saw ${networkFailures.length} failing request(s), starting with`,
+        `  // ${sample?.status ?? 'no response'} ${sample?.method} ${sample?.url}`,
+        `  // A request failing silently is invisible in the console.`,
+      )
+    }
+
+    lines.push(`  expect(failedRequests, ${q('no request should fail')}).toEqual([]);`)
   }
 
   while (lines[lines.length - 1] === '') {

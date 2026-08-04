@@ -25,6 +25,7 @@ import { captureTab } from './screenshot'
 import {
   appendConsoleError,
   appendInteraction,
+  appendNetwork,
   beginSession,
   clearAll,
   getBuffer,
@@ -141,6 +142,7 @@ async function stopRecording(): Promise<PopupResponse> {
     },
     interactions: buffer?.interactions ?? [],
     consoleErrors: buffer?.consoleErrors ?? [],
+    network: buffer?.network ?? [],
     startedAt: state.startedAt ?? stoppedAt,
     stoppedAt,
   }
@@ -304,6 +306,9 @@ async function handleContentMessage(
       break
     case 'RECORD_CONSOLE_ERROR':
       await appendConsoleError(message.sessionId, message.error)
+      break
+    case 'RECORD_NETWORK':
+      await appendNetwork(message.sessionId, message.entry)
       break
     case 'RECORD_ENVIRONMENT':
       await setEnvironment(message.sessionId, message.environment)

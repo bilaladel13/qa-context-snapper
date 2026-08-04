@@ -9,6 +9,7 @@ import type {
   ConsoleErrorEntry,
   EnvironmentSnapshot,
   InteractionEvent,
+  NetworkEntry,
   PageInfo,
   RecorderState,
 } from '@/types'
@@ -127,12 +128,14 @@ export type ContentToBackground =
   | { type: 'CONTENT_HELLO' }
   | { type: 'RECORD_INTERACTION'; sessionId: string; interaction: InteractionEvent }
   | { type: 'RECORD_CONSOLE_ERROR'; sessionId: string; error: ConsoleErrorEntry }
+  | { type: 'RECORD_NETWORK'; sessionId: string; entry: NetworkEntry }
   | { type: 'RECORD_ENVIRONMENT'; sessionId: string; environment: EnvironmentSnapshot }
 
 export interface ContentToBackgroundResponseMap {
   CONTENT_HELLO: { sessionId: string | null }
   RECORD_INTERACTION: { received: true }
   RECORD_CONSOLE_ERROR: { received: true }
+  RECORD_NETWORK: { received: true }
   RECORD_ENVIRONMENT: { received: true }
 }
 
@@ -142,6 +145,7 @@ const CONTENT_TO_BACKGROUND_TYPES = new Set([
   'CONTENT_HELLO',
   'RECORD_INTERACTION',
   'RECORD_CONSOLE_ERROR',
+  'RECORD_NETWORK',
   'RECORD_ENVIRONMENT',
 ])
 

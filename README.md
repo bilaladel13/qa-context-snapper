@@ -44,6 +44,7 @@ Press stop and three artefacts exist at once, from one recording:
 - **Name phases while recording** — they become `test.step` groups, report headings and Jira sections.
 - **Visual context** — a screenshot taken the moment you stop, previewed before it is attached.
 - **Console capture that actually works** — including errors thrown by the page's own scripts.
+- **Failure triage fingerprint** — a stable duplicate-hunting signature with a likely-cause summary.
 - **Survives navigation** — a recording continues across full page loads and logins.
 - **Relative navigation** — emits `page.goto('/checkout')` so tests follow your `baseURL`.
 - **Secrets are never captured** — password and card fields record as `[redacted]`.

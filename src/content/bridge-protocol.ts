@@ -1,8 +1,9 @@
-import type { ConsoleErrorLevel, ConsoleErrorOrigin } from '@/types'
+import type { ConsoleErrorLevel, ConsoleErrorOrigin, NetworkOutcome } from '@/types'
 
 export const CONSOLE_CHANNEL = 'qa-context-snapper/console'
 
-export interface BridgePayload {
+export interface BridgeConsolePayload {
+  kind: 'console'
   level: ConsoleErrorLevel
   origin: ConsoleErrorOrigin
   message: string
@@ -12,6 +13,18 @@ export interface BridgePayload {
   columnNumber?: number
   timestamp: number
 }
+
+export interface BridgeNetworkPayload {
+  kind: 'network'
+  method: string
+  url: string
+  status: number | null
+  outcome: NetworkOutcome
+  durationMs: number
+  timestamp: number
+}
+
+export type BridgePayload = BridgeConsolePayload | BridgeNetworkPayload
 
 export interface BridgeMessage {
   channel: string

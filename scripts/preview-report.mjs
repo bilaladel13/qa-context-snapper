@@ -108,6 +108,7 @@ const DEFAULTS = {
   includeHeader: true,
   setViewport: true,
   includeConsoleAssertion: true,
+  includeNetworkAssertion: true,
   useRelativeUrls: true,
   secretEnvVar: 'QA_SNAPPER_SECRET',
 }
@@ -207,7 +208,8 @@ const VARIANTS = [
 function parses(script) {
   const runnable = script
     .replace(/^import .*$/gm, '')
-    .replace(/const consoleErrors: string\[\]/, 'const consoleErrors')
+    // Strip the TypeScript annotations so the body can be parsed as JavaScript.
+    .replace(/const (\w+): string\[\]/g, 'const $1')
 
   try {
     new Function(`const test = () => {}; test.step = () => {};
@@ -432,6 +434,46 @@ checks.push(
   ['flat output ignores names entirely', !markedFlat.includes('test.step')],
   ['grouped output parses', parses(grouped) === null],
   ['ungrouped output parses', parses(ungrouped) === null],
+)
+
+// The silent failure: the app swallowed a 500, so the console saw nothing.
+const networkSnapshot = {
+  ...markedSnapshot,
+  sessionId: 'network',
+  consoleErrors: [],
+  network: [
+    { id: 'n1', method: 'GET', url: 'https://api.example.com/members', status: 200, outcome: 'success', durationMs: 84, timestamp: at(0) },
+    { id: 'n2', method: 'POST', url: 'https://api.example.com/members', status: 500, outcome: 'failed', durationMs: 1203, timestamp: at(1000) },
+    { id: 'n3', method: 'GET', url: 'https://api.example.com/ping', status: null, outcome: 'error', durationMs: 30000, timestamp: at(2000) },
+  ],
+}
+
+const quietSnapshot = { ...networkSnapshot, sessionId: 'quiet', network: [networkSnapshot.network[0]] }
+
+const withNetwork = generatePlaywrightScript(networkSnapshot, DEFAULTS)
+const withoutNetwork = generatePlaywrightScript(quietSnapshot, DEFAULTS)
+const networkOff = generatePlaywrightScript(networkSnapshot, {
+  ...DEFAULTS,
+  includeNetworkAssertion: false,
+})
+const networkReport = generateReport(networkSnapshot).markdown
+
+show('\n--- network diagnostics ---\n')
+show(withNetwork + '\n')
+
+checks.push(
+  ['a failing request adds a listener', withNetwork.includes("page.on('response', (response) => {")],
+  ['requests that never completed are watched too', withNetwork.includes("page.on('requestfailed'")],
+  ['status 400 and above is the threshold', withNetwork.includes('response.status() >= 400')],
+  ['the failure is asserted', withNetwork.includes("expect(failedRequests, 'no request should fail').toEqual([])")],
+  ['the comment names the offending call', withNetwork.includes('500 POST https://api.example.com/members')],
+  // Adding the listener to every script would be noise on a clean recording.
+  ['a clean recording gets no network listener', !withoutNetwork.includes('failedRequests')],
+  ['the toggle removes it entirely', !networkOff.includes('failedRequests')],
+  ['the report counts failures against the total', networkReport.includes('2 of 3 captured request(s) failed')],
+  ['the report lists the failing call', networkReport.includes('| 500 | POST |')],
+  ['a request with no response is shown as such', networkReport.includes('| no response | GET |')],
+  ['the network script parses', parses(withNetwork) === null],
 )
 
 const asserted = generatePlaywrightScript(assertionSnapshot, DEFAULTS)

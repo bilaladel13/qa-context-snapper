@@ -161,6 +161,14 @@ export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: Se
             />
           </Field>
 
+          <Field label="Network assertion" hint="Collects responses of 400 and above plus requests that never completed, and asserts none occurred. Added only when the recording actually saw one, since a request failing silently is invisible in the console.">
+            <Toggle
+              label="Network assertion"
+              checked={settings.playwright.includeNetworkAssertion}
+              onChange={(includeNetworkAssertion) => setPlaywright({ includeNetworkAssertion })}
+            />
+          </Field>
+
           <Field label="Relative navigation" hint="Emits page.goto('/dashboard') instead of the recorded host and port, so the test follows baseURL in playwright.config.ts. A dev server on a different port then still works. URLs on other origins stay absolute.">
             <Toggle
               label="Relative navigation"
@@ -197,6 +205,14 @@ export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: Se
               label="Mask sensitive fields"
               checked={settings.capture.maskSensitive}
               onChange={(maskSensitive) => setCapture({ maskSensitive })}
+            />
+          </Field>
+
+          <Field label="Record network activity" hint="Watches fetch and XHR from inside the page to record method, URL, status and duration. Query values that look like tokens or keys are redacted before anything is stored. Request and response bodies are never captured.">
+            <Toggle
+              label="Record network activity"
+              checked={settings.capture.trackNetwork}
+              onChange={(trackNetwork) => setCapture({ trackNetwork })}
             />
           </Field>
 

@@ -3,6 +3,7 @@ import { Button } from '@/components/Button'
 import { CodeBlock } from '@/components/CodeBlock'
 import { Collapsible } from '@/components/Collapsible'
 import { ConsoleErrorsPanel } from '@/components/ConsoleErrorsPanel'
+import { NetworkPanel } from '@/components/NetworkPanel'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { StepsPanel } from '@/components/StepsPanel'
 import { JiraIcon, ResetIcon } from '@/components/icons'
@@ -85,14 +86,23 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
             No captured data is available for this recording.
           </p>
         ) : (
-          <div className="max-h-52 shrink-0 space-y-2 overflow-y-auto">
-            <Collapsible title="Recorded Steps" badge={`${snapshot.interactions.length}`}>
-              <StepsPanel steps={snapshot.interactions} />
-            </Collapsible>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              <Collapsible title="Recorded Steps" badge={`${snapshot.interactions.length}`}>
+                <StepsPanel steps={snapshot.interactions} />
+              </Collapsible>
 
-            <Collapsible title="Console Errors" badge={`${snapshot.consoleErrors.length}`}>
-              <ConsoleErrorsPanel errors={snapshot.consoleErrors} />
-            </Collapsible>
+              <Collapsible
+                title="Failed Requests"
+                badge={`${(snapshot.network ?? []).filter((entry) => entry.outcome !== 'success').length}`}
+              >
+                <NetworkPanel entries={snapshot.network ?? []} />
+              </Collapsible>
+
+              <Collapsible title="Console Errors" badge={`${snapshot.consoleErrors.length}`}>
+                <ConsoleErrorsPanel errors={snapshot.consoleErrors} />
+              </Collapsible>
+            </div>
           </div>
         )}
       </main>

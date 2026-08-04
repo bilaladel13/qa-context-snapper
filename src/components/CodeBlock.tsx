@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { requestDownload } from '@/messaging/client'
 import { Button } from './Button'
+import { IconButton } from './IconButton'
 import { TextInput } from './TextInput'
 import { CheckIcon, CopyIcon, DownloadIcon } from './icons'
 
@@ -65,10 +66,20 @@ export function CodeBlock({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <pre className="min-h-24 flex-1 overflow-auto rounded-lg border border-surface-border bg-surface-sunken p-3 font-mono text-[11px] leading-relaxed text-ink-muted">
-        {isEmpty ? <span className="text-ink-subtle">{placeholder}</span> : content}
-      </pre>
+    <div className="flex shrink-0 flex-col gap-2">
+      <div className="relative">
+        <pre className="max-h-28 min-h-20 overflow-auto rounded-lg border border-surface-border bg-surface-sunken p-3 pr-10 pt-10 font-mono text-[11px] leading-relaxed text-ink-muted">
+          {isEmpty ? <span className="text-ink-subtle">{placeholder}</span> : content}
+        </pre>
+        <IconButton
+          label={copied ? 'Copied' : 'Copy'}
+          active={copied}
+          disabled={isEmpty}
+          onClick={() => void handleCopy()}
+          className="absolute right-2 top-2"
+          icon={copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        />
+      </div>
 
       {/* Labelled because the two tabs are otherwise indistinguishable at a
           glance, which makes it easy to save the report thinking it is code. */}
@@ -101,16 +112,7 @@ export function CodeBlock({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
-        <Button
-          variant="ghost"
-          disabled={isEmpty}
-          onClick={() => void handleCopy()}
-          className="flex-1 py-1.5 text-xs"
-          icon={copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
+      <div className="flex shrink-0 items-center justify-end gap-2">
         {status ? (
           <span className="shrink-0 truncate text-[10px] text-ink-muted" title={status}>
             {status}

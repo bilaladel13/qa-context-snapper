@@ -306,6 +306,29 @@ function handleBridgeMessage(event: MessageEvent): void {
   }
 
   const payload = data.payload
+
+  if (payload.kind === 'network') {
+    if (!capture.trackNetwork) {
+      return
+    }
+
+    void reportToBackground({
+      type: 'RECORD_NETWORK',
+      sessionId: session.id,
+      entry: {
+        id: nextId(),
+        method: payload.method,
+        url: payload.url,
+        status: payload.status,
+        outcome: payload.outcome,
+        durationMs: payload.durationMs,
+        timestamp: payload.timestamp,
+      },
+    })
+
+    return
+  }
+
   const error: ConsoleErrorEntry = {
     id: nextId(),
     level: payload.level,

@@ -12,6 +12,7 @@ export interface PlaywrightSettings {
   includeHeader: boolean
   setViewport: boolean
   includeConsoleAssertion: boolean
+  includeNetworkAssertion: boolean
   useRelativeUrls: boolean
   secretEnvVar: string
 }
@@ -19,6 +20,7 @@ export interface PlaywrightSettings {
 export interface CaptureSettings {
   maskSensitive: boolean
   trackKeyboard: boolean
+  trackNetwork: boolean
   testIdAttributes: string
 }
 
@@ -51,12 +53,14 @@ export const DEFAULT_SETTINGS: Settings = {
     includeHeader: true,
     setViewport: true,
     includeConsoleAssertion: true,
+    includeNetworkAssertion: true,
     useRelativeUrls: true,
     secretEnvVar: 'QA_SNAPPER_SECRET',
   },
   capture: {
     maskSensitive: true,
     trackKeyboard: true,
+    trackNetwork: true,
     testIdAttributes: 'data-testid, data-test-id, data-test, data-qa, data-cy',
   },
   jira: {

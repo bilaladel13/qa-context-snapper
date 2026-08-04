@@ -51,15 +51,15 @@ function cell(type: 'tableHeader' | 'tableCell', value: string): AdfNode {
   return { type, attrs: {}, content: [paragraph(value)] }
 }
 
-function table(rows: [string, string][]): AdfNode {
+function table(headers: string[], rows: string[][]): AdfNode {
   return {
     type: 'table',
     attrs: { isNumberColumnEnabled: false, layout: 'default' },
     content: [
-      { type: 'tableRow', content: [cell('tableHeader', 'Field'), cell('tableHeader', 'Value')] },
+      { type: 'tableRow', content: headers.map((header) => cell('tableHeader', header)) },
       ...rows.map((row) => ({
         type: 'tableRow',
-        content: [cell('tableCell', row[0]), cell('tableCell', row[1])],
+        content: row.map((value) => cell('tableCell', value)),
       })),
     ],
   }
@@ -174,7 +174,7 @@ export function buildDescription(
     heading(2, 'Expected result'),
     ...richText(options.expected ?? '', 'Describe what should have happened.'),
     heading(2, 'Environment'),
-    table([
+    table(['Field', 'Value'], [
       ['Browser', `${environment.browser} ${environment.browserVersion}`],
       ['Operating system', environment.os],
       ['Screen', `${environment.screenSize} at ${environment.devicePixelRatio}x`],
@@ -184,11 +184,30 @@ export function buildDescription(
       ['Final URL', finalUrl],
       ['Recording length', formatDuration(snapshot.startedAt, snapshot.stoppedAt)],
     ]),
+
     heading(2, 'Steps to reproduce'),
     ...(interactions.length > 0
       ? stepNodes(interactions)
       : [paragraph('No interactions were captured.')]),
   ]
+
+  const networkFailures = (snapshot.network ?? []).filter((entry) => entry.outcome !== 'success')
+
+  // Only surfaced when something failed. A list of successful calls is noise in
+  // a bug report.
+  if (networkFailures.length > 0) {
+    content.push(heading(2, 'Failed requests'))
+    content.push(
+      table(
+        ['Status', 'Method', 'URL'],
+        networkFailures.map((entry) => [
+          String(entry.status ?? 'no response'),
+          entry.method,
+          entry.url,
+        ]),
+      ),
+    )
+  }
 
   if (options.includeConsoleErrors !== false) {
     content.push(heading(2, 'Console output'))

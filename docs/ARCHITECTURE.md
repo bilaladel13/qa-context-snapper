@@ -209,6 +209,14 @@ anything. And when the recording captured console errors, the test registers `co
 `pageerror` listeners and ends with an assertion that they stayed empty, so the generated test fails
 while the bug is present and passes once it is fixed.
 
+### Failure triage fingerprint
+
+The recorder also computes a stable fingerprint from the captured flow, console output and failed
+requests. That gives the popup, the Markdown report and the Jira description a shared duplicate-hunt
+key plus a likely-cause summary, without calling an external AI service. The fingerprint is meant
+to be pasted into chat, ticket comments or triage spreadsheets so the same regression can be grouped
+quickly across sessions.
+
 `npm run preview:report` renders both outputs from a fixture and parses the generated script to
 confirm it is syntactically valid.
 

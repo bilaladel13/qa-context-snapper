@@ -85,6 +85,30 @@ function numberedSteps(interactions: ContextSnapshot['interactions']): string[] 
   return lines
 }
 
+function networkSection(snapshot: ContextSnapshot): string[] {
+  const entries = snapshot.network ?? []
+  const failures = entries.filter((entry) => entry.outcome !== 'success')
+
+  if (entries.length === 0) {
+    return ['No network activity was captured.']
+  }
+
+  if (failures.length === 0) {
+    return [`All ${entries.length} captured request(s) succeeded.`]
+  }
+
+  return [
+    `${failures.length} of ${entries.length} captured request(s) failed.`,
+    '',
+    '| Status | Method | URL | Time |',
+    '| --- | --- | --- | --- |',
+    ...failures.map(
+      (entry) =>
+        `| ${entry.status ?? 'no response'} | ${entry.method} | ${escapeTableCell(entry.url)} | ${entry.durationMs} ms |`,
+    ),
+  ]
+}
+
 export function generateMarkdownReport(snapshot: ContextSnapshot): string {
   const { environment, interactions, consoleErrors } = snapshot
   const finalUrl = interactions[interactions.length - 1]?.url ?? environment.pageUrl
@@ -115,6 +139,10 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
     consoleErrors.length > 0
       ? `The page logged ${consoleErrors.length} console error(s). See below.`
       : '_What happened instead._',
+    '',
+    '## Network',
+    '',
+    ...networkSection(snapshot),
     '',
     '## Console output',
     '',

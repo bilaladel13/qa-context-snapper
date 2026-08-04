@@ -44,6 +44,43 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
     }
   }
 
+  // A bearer token or signature in a query string would otherwise travel into a
+  // bug report and a Jira ticket.
+  const SENSITIVE = /token|key|secret|password|auth|session|signature|sig|code/i
+
+  const cleanUrl = (input: unknown): string => {
+    const raw = String(input ?? '')
+
+    try {
+      const parsed = new URL(raw, location.href)
+
+      parsed.searchParams.forEach((_value, name) => {
+        if (SENSITIVE.test(name)) parsed.searchParams.set(name, 'redacted')
+      })
+
+      return parsed.toString().slice(0, 500)
+    } catch {
+      return raw.split('?')[0].slice(0, 500)
+    }
+  }
+
+  const reportRequest = (
+    method: string,
+    url: unknown,
+    status: number | null,
+    startedAt: number,
+  ): void => {
+    post({
+      kind: 'network',
+      method: String(method || 'GET').toUpperCase(),
+      url: cleanUrl(url),
+      status,
+      outcome: status === null ? 'error' : status >= 400 ? 'failed' : 'success',
+      durationMs: Math.max(0, Math.round(Date.now() - startedAt)),
+      timestamp: Date.now(),
+    })
+  }
+
   const originalError = console.error
   const originalWarn = console.warn
 
@@ -59,6 +96,7 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
             }
           }
           post({
+            kind: 'console',
             level,
             origin: 'console',
             message: args.map(stringify).join(' ').slice(0, MAX_MESSAGE_LENGTH),
@@ -78,8 +116,70 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
   const patchedError = forward('error')
   const patchedWarn = forward('warn')
 
+  // fetch and XHR are patched here rather than in the isolated world for the
+  // same reason console is: the page holds a different function object, so a
+  // patch applied over there would observe none of its traffic.
+  const originalFetch = window.fetch
+
+  const patchedFetch = function (this: unknown, ...args: unknown[]) {
+    const startedAt = Date.now()
+    const request = args[0] as { url?: string; method?: string } | string
+    const init = args[1] as { method?: string } | undefined
+
+    const url = typeof request === 'string' ? request : (request?.url ?? String(request))
+    const method = init?.method ?? (typeof request === 'object' ? request?.method : '') ?? 'GET'
+
+    return (originalFetch as (...a: unknown[]) => Promise<Response>)
+      .apply(this, args)
+      .then((response: Response) => {
+        try {
+          reportRequest(method, url, response.status, startedAt)
+        } catch {
+          // Never let reporting interfere with the page's own request.
+        }
+        return response
+      })
+      .catch((error: unknown) => {
+        try {
+          reportRequest(method, url, null, startedAt)
+        } catch {
+          // As above.
+        }
+        throw error
+      })
+  }
+
+  const originalOpen = XMLHttpRequest.prototype.open
+  const originalSend = XMLHttpRequest.prototype.send
+
+  const patchedOpen = function (this: XMLHttpRequest, ...args: unknown[]) {
+    const record = this as XMLHttpRequest & { __qaMethod?: string; __qaUrl?: string }
+    record.__qaMethod = String(args[0] ?? 'GET')
+    record.__qaUrl = String(args[1] ?? '')
+
+    return (originalOpen as (...a: unknown[]) => void).apply(this, args)
+  }
+
+  const patchedSend = function (this: XMLHttpRequest, ...args: unknown[]) {
+    const record = this as XMLHttpRequest & { __qaMethod?: string; __qaUrl?: string }
+    const startedAt = Date.now()
+
+    this.addEventListener('loadend', () => {
+      try {
+        // status stays 0 when the request never reached a response at all.
+        const status = this.status === 0 ? null : this.status
+        reportRequest(record.__qaMethod ?? 'GET', record.__qaUrl, status, startedAt)
+      } catch {
+        // As above.
+      }
+    })
+
+    return (originalSend as (...a: unknown[]) => void).apply(this, args)
+  }
+
   const onError = (event: ErrorEvent): void => {
     post({
+      kind: 'console',
       level: 'error',
       origin: 'window',
       message: (event.message || 'Uncaught error').slice(0, MAX_MESSAGE_LENGTH),
@@ -94,6 +194,7 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
   const onRejection = (event: PromiseRejectionEvent): void => {
     const reason: unknown = event.reason
     post({
+      kind: 'console',
       level: 'unhandledrejection',
       origin: 'window',
       message: `Unhandled promise rejection: ${stringify(reason)}`.slice(0, MAX_MESSAGE_LENGTH),
@@ -105,6 +206,9 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
   const uninstall = (): void => {
     if (console.error === patchedError) console.error = originalError
     if (console.warn === patchedWarn) console.warn = originalWarn
+    if (window.fetch === patchedFetch) window.fetch = originalFetch
+    if (XMLHttpRequest.prototype.open === patchedOpen) XMLHttpRequest.prototype.open = originalOpen
+    if (XMLHttpRequest.prototype.send === patchedSend) XMLHttpRequest.prototype.send = originalSend
     window.removeEventListener('error', onError, true)
     window.removeEventListener('unhandledrejection', onRejection, true)
     window.removeEventListener('message', onControl)
@@ -122,6 +226,9 @@ export function installConsoleBridge(channel: string, sessionId: string): void {
 
   console.error = patchedError
   console.warn = patchedWarn
+  window.fetch = patchedFetch as typeof window.fetch
+  XMLHttpRequest.prototype.open = patchedOpen as typeof XMLHttpRequest.prototype.open
+  XMLHttpRequest.prototype.send = patchedSend as typeof XMLHttpRequest.prototype.send
   window.addEventListener('error', onError, true)
   window.addEventListener('unhandledrejection', onRejection, true)
   window.addEventListener('message', onControl)

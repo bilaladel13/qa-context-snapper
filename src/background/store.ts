@@ -3,6 +3,7 @@ import type {
   ConsoleErrorEntry,
   EnvironmentSnapshot,
   InteractionEvent,
+  NetworkEntry,
   RecorderState,
 } from '@/types'
 
@@ -12,12 +13,14 @@ const SCREENSHOT_KEY = 'recorderScreenshot'
 
 const MAX_INTERACTIONS = 1000
 const MAX_CONSOLE_ERRORS = 300
+const MAX_NETWORK_ENTRIES = 400
 
 export interface RecordingBuffer {
   sessionId: string
   environment: EnvironmentSnapshot | null
   interactions: InteractionEvent[]
   consoleErrors: ConsoleErrorEntry[]
+  network: NetworkEntry[]
 }
 
 export const INITIAL_STATE: RecorderState = {
@@ -30,6 +33,7 @@ export const INITIAL_STATE: RecorderState = {
   stoppedAt: null,
   interactionCount: 0,
   consoleErrorCount: 0,
+  networkFailureCount: 0,
   snapshot: null,
   screenshot: null,
   screenshotError: null,
@@ -93,6 +97,7 @@ export function beginSession(
       environment: null,
       interactions: [],
       consoleErrors: [],
+      network: [],
     }
 
     const next: RecorderState = { ...INITIAL_STATE, ...patch, sessionId }
@@ -157,6 +162,7 @@ async function mutateBuffer(
     ...state,
     interactionCount: buffer.interactions.length,
     consoleErrorCount: buffer.consoleErrors.length,
+    networkFailureCount: buffer.network.filter((entry) => entry.outcome !== 'success').length,
   }
 
   await chrome.storage.session.set({ [BUFFER_KEY]: buffer, [STATE_KEY]: next })
@@ -198,6 +204,25 @@ export function appendConsoleError(sessionId: string, error: ConsoleErrorEntry):
       }
 
       buffer.consoleErrors.push(error)
+    }),
+  )
+}
+
+// Successful requests are kept as well, so the report can say how much traffic
+// a failure sat among rather than showing it with no context.
+export function appendNetwork(sessionId: string, entry: NetworkEntry): Promise<void> {
+  return withLock(() =>
+    mutateBuffer(sessionId, (buffer) => {
+      buffer.network ??= []
+
+      if (buffer.network.length >= MAX_NETWORK_ENTRIES) {
+        const firstSuccess = buffer.network.findIndex((item) => item.outcome === 'success')
+
+        // Drop a success before ever dropping a failure.
+        buffer.network.splice(firstSuccess === -1 ? 0 : firstSuccess, 1)
+      }
+
+      buffer.network.push(entry)
     }),
   )
 }

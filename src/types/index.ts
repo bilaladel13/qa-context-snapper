@@ -32,6 +32,20 @@ export interface ConsoleErrorEntry {
   timestamp: number
 }
 
+// 'failed' is a response the server sent and the app may have swallowed.
+// 'error' is a request that never produced one at all.
+export type NetworkOutcome = 'success' | 'failed' | 'error'
+
+export interface NetworkEntry {
+  id: string
+  method: string
+  url: string
+  status: number | null
+  outcome: NetworkOutcome
+  durationMs: number
+  timestamp: number
+}
+
 export type InteractionType =
   | 'click'
   | 'input'
@@ -123,6 +137,7 @@ export interface ContextSnapshot {
   sessionId: string
   environment: EnvironmentSnapshot
   consoleErrors: ConsoleErrorEntry[]
+  network: NetworkEntry[]
   interactions: InteractionEvent[]
   startedAt: number
   stoppedAt: number
@@ -155,6 +170,7 @@ export interface RecorderState {
   stoppedAt: number | null
   interactionCount: number
   consoleErrorCount: number
+  networkFailureCount: number
   snapshot: ContextSnapshot | null
   screenshot: ScreenshotMeta | null
   screenshotError: string | null
