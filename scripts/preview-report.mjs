@@ -171,6 +171,7 @@ const assertionSnapshot = {
       { target: target({ strategy: 'testId', value: 'row', nth: 1, tagName: 'li', cssSelector: 'li' }) },
       { expected: '2', message: "O'Brien's row should be gone" },
     ),
+    assert('notText', { target: target({ strategy: 'testId', value: 'member-email', tagName: 'span', cssSelector: '.email' }) }, { expected: 'محمد' }),
   ],
 }
 
@@ -502,6 +503,27 @@ checks.push(
   ['a reason survives alongside a count', asserted.includes(".toHaveCount(2)") && asserted.includes("O\\'Brien")],
   ['a quote in the reason is escaped', !/[^\\]'O'Brien/.test(asserted)],
   ['assertions without a reason stay plain', asserted.includes('await expect(page.getByTestId(\'success-toast\')).toBeHidden()')],
+  ['notText becomes not.toContainText', asserted.includes(".getByTestId('member-email')).not.toContainText('محمد')")],
+)
+
+const silentBugSnapshot = {
+  ...assertionSnapshot,
+  sessionId: 'silent-bug',
+  interactions: [
+    ...assertionSnapshot.interactions,
+    assert(
+      'hidden',
+      { target: target({ strategy: 'testId', value: 'member-row', tagName: 'tr', cssSelector: 'tr' }) },
+      { expected: 'hidden', actual: 'visible', isViolation: true },
+    ),
+  ],
+}
+
+const bugReport = generateReport(silentBugSnapshot).markdown
+
+checks.push(
+  ['report highlights failed assertion as observed bug', bugReport.includes('❌ Failed Assertion (Observed Bug)')],
+  ['report contains expected and actual comparison', bugReport.includes('**Expected**:') && bugReport.includes('**Actual**:')],
 )
 
 show('\n')

@@ -1,4 +1,4 @@
-import { describeStep } from '@/generator/shared'
+import { describeStep, formatExpectedAssertion } from '@/generator/shared'
 import type { ConsoleErrorEntry, ContextSnapshot } from '@/types'
 
 // Atlassian Document Format. Built straight from the snapshot rather than by
@@ -132,8 +132,15 @@ function formatDuration(startedAt: number, stoppedAt: number): string {
 export function suggestSummary(snapshot: ContextSnapshot): string {
   const page = snapshot.environment.pageTitle || snapshot.environment.pageUrl || 'Recorded session'
   const firstError = snapshot.consoleErrors[0]
+  const firstFailed = snapshot.interactions.find(
+    (step) => step.type === 'assertion' && step.assertion?.isViolation,
+  )
 
-  const summary = firstError ? `${page}: ${firstError.message}` : page
+  const summary = firstError
+    ? `${page}: ${firstError.message}`
+    : firstFailed
+      ? `${page}: ${firstFailed.assertion?.message || formatExpectedAssertion(firstFailed)}`
+      : page
 
   return summary.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_LIMIT)
 }

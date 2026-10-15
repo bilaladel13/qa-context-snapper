@@ -1,6 +1,9 @@
 import type { BackgroundBroadcast } from '@/messaging/protocol'
+import { generateReport } from '@/generator'
+import { loadSettings } from '@/settings/store'
 import type {
   ConsoleErrorEntry,
+  ContextSnapshot,
   EnvironmentSnapshot,
   InteractionEvent,
   NetworkEntry,
@@ -236,4 +239,36 @@ export function setEnvironment(
       buffer.environment ??= environment
     }),
   )
+}
+
+export function removeStep(stepId: string): Promise<RecorderState> {
+  return withLock(async () => {
+    const buffer = await loadBuffer()
+    if (buffer) {
+      buffer.interactions = buffer.interactions.filter((step) => step.id !== stepId)
+      await chrome.storage.session.set({ [BUFFER_KEY]: buffer })
+    }
+
+    const state = await loadState()
+    if (state.snapshot) {
+      const interactions = state.snapshot.interactions.filter((step) => step.id !== stepId)
+      const snapshot: ContextSnapshot = {
+        ...state.snapshot,
+        interactions,
+      }
+      const settings = await loadSettings()
+      const report = generateReport(snapshot, settings)
+      const next: RecorderState = {
+        ...state,
+        snapshot,
+        report,
+        interactionCount: interactions.length,
+      }
+      await chrome.storage.session.set({ [STATE_KEY]: next })
+      broadcast(next)
+      return next
+    }
+
+    return state
+  })
 }

@@ -8,6 +8,7 @@ import { Textarea } from '@/components/Textarea'
 import { TextInput } from '@/components/TextInput'
 import { CheckIcon, ExternalIcon, ResetIcon } from '@/components/icons'
 import { suggestSummary } from '@/jira/adf'
+import { formatActualAssertion, formatExpectedAssertion } from '@/generator/shared'
 import type { JiraController } from '@/popup/useJira'
 import type { SettingsController } from '@/popup/useSettings'
 import { ScreenshotField } from '@/components/ScreenshotField'
@@ -67,6 +68,40 @@ export function JiraView({
   useEffect(() => {
     if (snapshot) {
       setSummary(suggestSummary(snapshot))
+
+      const failedAssertions = snapshot.interactions.filter(
+        (step) => step.type === 'assertion' && step.assertion?.isViolation,
+      )
+
+      if (failedAssertions.length > 0) {
+        const expectedText = failedAssertions
+          .map(
+            (s) =>
+              `- ${formatExpectedAssertion(s)}${
+                s.assertion?.message ? ` (${s.assertion.message})` : ''
+              }`,
+          )
+          .join('\n')
+
+        const actualText = failedAssertions
+          .map(
+            (s) =>
+              `❌ ${formatActualAssertion(s)} (Expected: ${formatExpectedAssertion(s)})${
+                s.assertion?.message ? `\n   Reason: ${s.assertion.message}` : ''
+              }`,
+          )
+          .join('\n')
+
+        setExpected(expectedText)
+        setActual(actualText)
+      } else if (snapshot.consoleErrors.length > 0) {
+        setExpected('The page should execute without logging console errors.')
+        setActual(
+          `The page logged ${snapshot.consoleErrors.length} console error(s):\n${snapshot.consoleErrors
+            .map((e) => `- [${e.level}] ${e.message}`)
+            .join('\n')}`,
+        )
+      }
     }
   }, [snapshot])
 

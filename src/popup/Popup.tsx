@@ -96,6 +96,7 @@ export function Popup() {
           pending={pending}
           onReset={recorder.reset}
           onCreateTicket={() => setRoute('jira')}
+          onDeleteStep={recorder.deleteStep}
         />
       ) : (
         <IdleView

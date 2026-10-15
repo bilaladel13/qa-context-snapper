@@ -26,9 +26,16 @@ interface ResultViewProps {
   pending: boolean
   onReset: () => void
   onCreateTicket: () => void
+  onDeleteStep?: (stepId: string) => void
 }
 
-export function ResultView({ state, pending, onReset, onCreateTicket }: ResultViewProps) {
+export function ResultView({
+  state,
+  pending,
+  onReset,
+  onCreateTicket,
+  onDeleteStep,
+}: ResultViewProps) {
   const [active, setActive] = useState<Tab>('markdown')
 
   const date = useMemo(
@@ -89,7 +96,7 @@ export function ResultView({ state, pending, onReset, onCreateTicket }: ResultVi
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
               <Collapsible title="Recorded Steps" badge={`${snapshot.interactions.length}`}>
-                <StepsPanel steps={snapshot.interactions} />
+                <StepsPanel steps={snapshot.interactions} onDeleteStep={onDeleteStep} />
               </Collapsible>
 
               <Collapsible

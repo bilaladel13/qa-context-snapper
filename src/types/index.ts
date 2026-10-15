@@ -62,6 +62,7 @@ export type AssertionKind =
   | 'visible'
   | 'hidden'
   | 'text'
+  | 'notText'
   | 'exactText'
   | 'value'
   | 'enabled'
@@ -80,6 +81,10 @@ export interface AssertionDetail {
   // Surfaced by Playwright when the assertion fails, where the default message
   // says what broke but not why it mattered.
   message?: string
+  // Observed DOM state captured at the time the assertion was added.
+  actual?: string
+  // Set to true if the observed DOM state violated the assertion at capture time.
+  isViolation?: boolean
 }
 
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'css'

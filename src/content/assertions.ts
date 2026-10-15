@@ -113,6 +113,7 @@ export function suggestAssertions(element: Element, target: ElementTarget): Asse
 
   if (text) {
     options.push({ kind: 'text', label: 'Contains text', expected: text, editable: true })
+    options.push({ kind: 'notText', label: 'Does not contain text', expected: text, editable: true })
     options.push({ kind: 'exactText', label: 'Has exact text', expected: text, editable: true })
   }
 
@@ -133,13 +134,24 @@ export function suggestAssertions(element: Element, target: ElementTarget): Asse
         ? { kind: 'checked', label: 'Is checked', editable: false }
         : { kind: 'unchecked', label: 'Is not checked', editable: false },
     )
+    options.push(
+      element.checked
+        ? { kind: 'unchecked', label: 'Is not checked', editable: false }
+        : { kind: 'checked', label: 'Is checked', editable: false },
+    )
   }
 
   if (supportsDisabled(element)) {
+    const disabled = isDisabled(element)
     options.push(
-      isDisabled(element)
+      disabled
         ? { kind: 'disabled', label: 'Is disabled', editable: false }
         : { kind: 'enabled', label: 'Is enabled', editable: false },
+    )
+    options.push(
+      disabled
+        ? { kind: 'enabled', label: 'Is enabled', editable: false }
+        : { kind: 'disabled', label: 'Is disabled', editable: false },
     )
   }
 
@@ -180,17 +192,153 @@ export function pageAssertions(): AssertionOption[] {
 
 export const MAX_MESSAGE_LENGTH = 200
 
+export interface AssertionEvaluation {
+  actual: string
+  isViolation: boolean
+}
+
+export function evaluateAssertion(
+  kind: AssertionKind,
+  expected: string,
+  element: Element | null,
+  attribute?: string,
+): AssertionEvaluation | null {
+  if (!element) {
+    if (kind === 'url') {
+      const currentUrl = typeof location !== 'undefined' ? location.href : ''
+      return {
+        actual: currentUrl,
+        isViolation: currentUrl !== expected,
+      }
+    }
+    if (kind === 'title') {
+      const currentTitle = typeof document !== 'undefined' ? document.title : ''
+      return {
+        actual: currentTitle,
+        isViolation: currentTitle !== expected,
+      }
+    }
+    return null
+  }
+
+  switch (kind) {
+    case 'visible': {
+      const isVis = isElementVisible(element)
+      return {
+        actual: isVis ? 'visible' : 'hidden',
+        isViolation: !isVis,
+      }
+    }
+    case 'hidden': {
+      const isVis = isElementVisible(element)
+      return {
+        actual: isVis ? 'visible' : 'hidden',
+        isViolation: isVis,
+      }
+    }
+    case 'text': {
+      const text = readableText(element)
+      return {
+        actual: text,
+        isViolation: !text.includes(expected),
+      }
+    }
+    case 'notText': {
+      const text = readableText(element)
+      return {
+        actual: text,
+        isViolation: text.includes(expected),
+      }
+    }
+    case 'exactText': {
+      const text = readableText(element)
+      return {
+        actual: text,
+        isViolation: text !== expected,
+      }
+    }
+    case 'value': {
+      const control = asFormControl(element)
+      const val = control ? control.value : ''
+      return {
+        actual: val,
+        isViolation: val !== expected,
+      }
+    }
+    case 'enabled': {
+      const disabled = isDisabled(element)
+      return {
+        actual: disabled ? 'disabled' : 'enabled',
+        isViolation: disabled,
+      }
+    }
+    case 'disabled': {
+      const disabled = isDisabled(element)
+      return {
+        actual: disabled ? 'disabled' : 'enabled',
+        isViolation: !disabled,
+      }
+    }
+    case 'checked': {
+      const checked = isToggle(element) && element.checked
+      return {
+        actual: checked ? 'checked' : 'unchecked',
+        isViolation: !checked,
+      }
+    }
+    case 'unchecked': {
+      const checked = isToggle(element) && element.checked
+      return {
+        actual: checked ? 'checked' : 'unchecked',
+        isViolation: checked,
+      }
+    }
+    case 'attribute': {
+      const val = attribute ? element.getAttribute(attribute) ?? '' : ''
+      return {
+        actual: val,
+        isViolation: val !== expected,
+      }
+    }
+    default:
+      return null
+  }
+}
+
 export function toDetail(
   option: AssertionOption,
   expected: string,
   message: string,
+  element?: Element | null,
 ): AssertionDetail {
   const reason = message.trim().slice(0, MAX_MESSAGE_LENGTH)
+  const expectedVal = option.editable
+    ? expected
+    : option.expected ??
+      (option.kind === 'hidden'
+        ? 'hidden'
+        : option.kind === 'visible'
+          ? 'visible'
+          : option.kind === 'disabled'
+            ? 'disabled'
+            : option.kind === 'enabled'
+              ? 'enabled'
+              : option.kind === 'checked'
+                ? 'checked'
+                : option.kind === 'unchecked'
+                  ? 'unchecked'
+                  : '')
+
+  const evalResult =
+    element !== undefined
+      ? evaluateAssertion(option.kind, expectedVal, element, option.attribute)
+      : null
 
   return {
     kind: option.kind,
     ...(option.editable ? { expected } : {}),
     ...(option.attribute ? { attribute: option.attribute } : {}),
     ...(reason ? { message: reason } : {}),
+    ...(evalResult ? { actual: evalResult.actual, isViolation: evalResult.isViolation } : {}),
   }
 }

@@ -29,6 +29,7 @@ export type PopupRequest =
   | { type: 'START_RECORDING' }
   | { type: 'STOP_RECORDING' }
   | { type: 'RESET_RECORDING' }
+  | { type: 'DELETE_STEP'; stepId: string }
 
 export type PopupResponse = Result<RecorderState>
 
@@ -164,6 +165,7 @@ const POPUP_REQUEST_TYPES = new Set([
   'START_RECORDING',
   'STOP_RECORDING',
   'RESET_RECORDING',
+  'DELETE_STEP',
 ])
 
 const POPUP_QUERY_TYPES = new Set([

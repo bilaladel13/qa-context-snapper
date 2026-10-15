@@ -111,6 +111,8 @@ function assertion(
       return [`await ${subject}.toBeHidden();`]
     case 'text':
       return [`await ${subject}.toContainText(${q(trimEllipsis(expected))});`]
+    case 'notText':
+      return [`await ${subject}.not.toContainText(${q(trimEllipsis(expected))});`]
     case 'exactText':
       return [`await ${subject}.toHaveText(${q(trimEllipsis(expected))});`]
     case 'value':
@@ -369,8 +371,8 @@ export function generatePlaywrightScript(
     }
   }
 
-  if (options.includeConsoleAssertion && consoleErrors.length > 0) {
-    if (options.includeComments) {
+  if (options.includeConsoleAssertion) {
+    if (consoleErrors.length > 0 && options.includeComments) {
       lines.push(
         '',
         `  // The recording captured ${consoleErrors.length} console error(s).`,

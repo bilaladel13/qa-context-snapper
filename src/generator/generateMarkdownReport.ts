@@ -1,5 +1,5 @@
 import type { ConsoleErrorEntry, ContextSnapshot } from '@/types'
-import { describeStep, escapeTableCell } from './shared'
+import { describeStep, escapeTableCell, formatActualAssertion, formatExpectedAssertion } from './shared'
 
 const LEVEL_LABELS: Record<ConsoleErrorEntry['level'], string> = {
   error: 'Error',
@@ -115,6 +115,43 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
 
   const steps = interactions.length > 0 ? numberedSteps(interactions) : ['No interactions were captured.']
 
+  const failedAssertions = interactions.filter(
+    (step) => step.type === 'assertion' && step.assertion?.isViolation,
+  )
+
+  const expectedSection =
+    failedAssertions.length > 0
+      ? [
+          ...failedAssertions.map(
+            (step) =>
+              `- ${formatExpectedAssertion(step)}${
+                step.assertion?.message ? ` (${step.assertion.message})` : ''
+              }`,
+          ),
+        ]
+      : ['_What should have happened._']
+
+  const actualSection =
+    failedAssertions.length > 0
+      ? [
+          '### ❌ Failed Assertion (Observed Bug)',
+          '',
+          ...failedAssertions.flatMap((step) => [
+            `- **Expected**: ${formatExpectedAssertion(step)}`,
+            `  **Actual**: ${formatActualAssertion(step)}`,
+            ...(step.assertion?.message ? [`  **Reason**: ${step.assertion.message}`] : []),
+            '',
+          ]),
+          ...(consoleErrors.length > 0
+            ? [`The page also logged ${consoleErrors.length} console error(s). See below.`]
+            : []),
+        ]
+      : [
+          consoleErrors.length > 0
+            ? `The page logged ${consoleErrors.length} console error(s). See below.`
+            : '_What happened instead._',
+        ]
+
   const lines = [
     `# Bug report: ${environment.pageTitle || environment.pageUrl}`,
     '',
@@ -132,13 +169,11 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
     '',
     '## Expected result',
     '',
-    '_What should have happened._',
+    ...expectedSection,
     '',
     '## Actual result',
     '',
-    consoleErrors.length > 0
-      ? `The page logged ${consoleErrors.length} console error(s). See below.`
-      : '_What happened instead._',
+    ...actualSection,
     '',
     '## Network',
     '',

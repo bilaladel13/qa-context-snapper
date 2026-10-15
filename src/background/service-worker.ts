@@ -31,6 +31,7 @@ import {
   getBuffer,
   getState,
   readScreenshot,
+  removeStep,
   setEnvironment,
   updateState,
   writeScreenshot,
@@ -226,6 +227,8 @@ async function handlePopupRequest(request: PopupRequest): Promise<PopupResponse>
       return stopRecording()
     case 'RESET_RECORDING':
       return resetRecording()
+    case 'DELETE_STEP':
+      return ok(await removeStep(request.stepId))
   }
 }
 

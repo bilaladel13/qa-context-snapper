@@ -268,10 +268,15 @@ export function openInspector(handlers: InspectorHandlers): void {
     }, 1400)
   }
 
-  const record = (target: ElementTarget | null, option: AssertionOption, value: string) => {
+  const record = (
+    target: ElementTarget | null,
+    option: AssertionOption,
+    value: string,
+    element: Element | null,
+  ) => {
     const reason = readReason()
 
-    handlers.onAssert(target, toDetail(option, value, reason))
+    handlers.onAssert(target, toDetail(option, value, reason, element))
     closePanel()
     setHighlight(null)
     hovered = null
@@ -282,6 +287,7 @@ export function openInspector(handlers: InspectorHandlers): void {
     target: ElementTarget | null,
     option: AssertionOption,
     container: HTMLElement,
+    element: Element | null,
   ) => {
     const row = document.createElement('div')
     row.className = 'row'
@@ -290,7 +296,7 @@ export function openInspector(handlers: InspectorHandlers): void {
       const button = document.createElement('button')
       button.className = 'add'
       button.textContent = option.label
-      button.addEventListener('click', () => record(target, option, ''))
+      button.addEventListener('click', () => record(target, option, '', element))
       row.append(button)
     } else {
       const input = document.createElement('input')
@@ -302,7 +308,7 @@ export function openInspector(handlers: InspectorHandlers): void {
       save.className = 'save'
       save.textContent = option.kind === 'attribute' ? option.attribute ?? 'Set' : option.label
 
-      const commit = () => record(target, option, input.value)
+      const commit = () => record(target, option, input.value, element)
 
       save.addEventListener('click', commit)
       input.addEventListener('keydown', (event) => {
@@ -349,7 +355,7 @@ export function openInspector(handlers: InspectorHandlers): void {
     elementGroup.append(elementTitle)
 
     for (const option of suggestAssertions(element, target)) {
-      buildRow(target, option, elementGroup)
+      buildRow(target, option, elementGroup, element)
     }
 
     const pageGroup = document.createElement('div')
@@ -360,7 +366,7 @@ export function openInspector(handlers: InspectorHandlers): void {
     pageGroup.append(pageTitle)
 
     for (const option of pageAssertions()) {
-      buildRow(null, option, pageGroup)
+      buildRow(null, option, pageGroup, null)
     }
 
     const reason = document.createElement('div')

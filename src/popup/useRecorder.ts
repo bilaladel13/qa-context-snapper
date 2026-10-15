@@ -11,6 +11,7 @@ export interface Recorder {
   start: () => void
   stop: () => void
   reset: () => void
+  deleteStep: (stepId: string) => void
   focusTab: () => void
   startAssertion: () => void
   addStepMarker: () => void
@@ -106,6 +107,7 @@ export function useRecorder(): Recorder {
     start: useCallback(() => void dispatch({ type: 'START_RECORDING' }), [dispatch]),
     stop: useCallback(() => void dispatch({ type: 'STOP_RECORDING' }), [dispatch]),
     reset: useCallback(() => void dispatch({ type: 'RESET_RECORDING' }), [dispatch]),
+    deleteStep: useCallback((stepId: string) => void dispatch({ type: 'DELETE_STEP', stepId }), [dispatch]),
     focusTab,
     startAssertion,
     addStepMarker,

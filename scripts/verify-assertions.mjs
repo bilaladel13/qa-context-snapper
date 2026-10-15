@@ -193,6 +193,46 @@ const kinds = (element, over) => suggestAssertions(element, target(over)).map((o
   check('the reason survives alongside it', detail.message === 'the banner confirms the save')
 }
 
+// Expected vs Actual state capture and silent-bug violation detection
+{
+  const doc = mountDom(`
+    <ul id="list">
+      <li id="member-row">محمد</li>
+    </ul>
+    <button id="submit-btn">Submit</button>
+  `)
+
+  const row = doc.querySelector('#member-row')
+  const rowOptions = suggestAssertions(row, target())
+
+  check('offers does not contain text', rowOptions.some((o) => o.kind === 'notText'))
+
+  const hiddenOpt = rowOptions.find((o) => o.kind === 'hidden')
+  const hiddenDetail = toDetail(hiddenOpt, '', 'must not accept non-email text', row)
+
+  check('detects visible element violating hidden assertion', hiddenDetail.isViolation === true)
+  check('captures actual visible state', hiddenDetail.actual === 'visible')
+
+  const notTextOpt = rowOptions.find((o) => o.kind === 'notText')
+  const notTextDetail = toDetail(notTextOpt, 'محمد', 'invalid entry should not be present', row)
+
+  check('detects text violating notText assertion', notTextDetail.isViolation === true)
+  check('captures actual text in violation', notTextDetail.actual === 'محمد')
+
+  const visibleOpt = rowOptions.find((o) => o.kind === 'visible')
+  const visibleDetail = toDetail(visibleOpt, '', '', row)
+
+  check('passing visible assertion is not a violation', visibleDetail.isViolation === false)
+
+  const btn = doc.querySelector('#submit-btn')
+  const btnOptions = suggestAssertions(btn, target())
+  const disabledOpt = btnOptions.find((o) => o.kind === 'disabled')
+  const disabledDetail = toDetail(disabledOpt, '', 'should be disabled while form is invalid', btn)
+
+  check('detects enabled button violating disabled assertion', disabledDetail.isViolation === true)
+  check('captures actual enabled state', disabledDetail.actual === 'enabled')
+}
+
 for (const entry of results) {
   process.stdout.write(`${entry.passed ? 'ok  ' : 'FAIL'}  ${entry.name}\n`)
   if (!entry.passed && entry.detail) {

@@ -132,6 +132,8 @@ function describeClaim(step: InteractionEvent): string {
       return `Check that ${subject} is not visible`
     case 'text':
       return `Check that ${subject} contains "${expected}"`
+    case 'notText':
+      return `Check that ${subject} does not contain "${expected}"`
     case 'exactText':
       return `Check that ${subject} reads exactly "${expected}"`
     case 'value':
@@ -155,6 +157,80 @@ function describeClaim(step: InteractionEvent): string {
     default:
       return `Check ${subject}`
   }
+}
+
+export function formatExpectedAssertion(step: InteractionEvent): string {
+  const detail = step.assertion
+  if (!detail) return describeStep(step)
+  const subject = describeTarget(step.target)
+  const expected = detail.expected ?? ''
+
+  switch (detail.kind) {
+    case 'visible':
+      return `${subject} should be visible`
+    case 'hidden':
+      return `${subject} should be hidden / not exist`
+    case 'text':
+      return `${subject} should contain "${expected}"`
+    case 'notText':
+      return `${subject} should not contain "${expected}"`
+    case 'exactText':
+      return `${subject} should have exact text "${expected}"`
+    case 'value':
+      return `${subject} should have value "${expected}"`
+    case 'enabled':
+      return `${subject} should be enabled`
+    case 'disabled':
+      return `${subject} should be disabled`
+    case 'checked':
+      return `${subject} should be checked`
+    case 'unchecked':
+      return `${subject} should be unchecked`
+    case 'count':
+      return `${subject} should match ${expected} elements`
+    case 'attribute':
+      return `${subject} should have attribute ${detail.attribute}="${expected}"`
+    case 'url':
+      return `URL should be "${expected}"`
+    case 'title':
+      return `Title should be "${expected}"`
+    default:
+      return describeClaim(step)
+  }
+}
+
+export function formatActualAssertion(step: InteractionEvent): string {
+  const detail = step.assertion
+  if (!detail) return 'Unmet condition'
+  const subject = describeTarget(step.target)
+  const actual = detail.actual
+
+  if (actual !== undefined) {
+    switch (detail.kind) {
+      case 'visible':
+        return `${subject} is ${actual}`
+      case 'hidden':
+        return `${subject} is ${actual} (it is present in the DOM)`
+      case 'text':
+        return `${subject} contains "${actual}" instead`
+      case 'notText':
+        return `${subject} contains "${actual}"`
+      case 'exactText':
+        return `${subject} has text "${actual}"`
+      case 'value':
+        return `${subject} has value "${actual}"`
+      case 'enabled':
+      case 'disabled':
+        return `${subject} is currently ${actual}`
+      case 'checked':
+      case 'unchecked':
+        return `${subject} is currently ${actual}`
+      default:
+        return `${subject} actual state is "${actual}"`
+    }
+  }
+
+  return `Observed state did not match expected ${detail.kind}`
 }
 
 export function describeStep(step: InteractionEvent): string {
