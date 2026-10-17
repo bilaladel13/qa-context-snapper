@@ -33,7 +33,7 @@
     }
   ],
   "permissions": ["activeTab", "downloads", "scripting", "storage", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": ["<all_urls>", "https://api.qase.io/*"],
   "commands": {
     "toggle-recording": {
       "suggested_key": {

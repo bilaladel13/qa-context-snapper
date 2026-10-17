@@ -1,5 +1,12 @@
 import type { ConsoleErrorEntry, ContextSnapshot } from '@/types'
-import { describeStep, escapeTableCell, formatActualAssertion, formatExpectedAssertion } from './shared'
+import {
+  cleanAndDeduplicateInteractions,
+  describeStep,
+  escapeTableCell,
+  formatActualAssertion,
+  formatExpectedAssertion,
+  formatQaseCaseUrl,
+} from './shared'
 
 const LEVEL_LABELS: Record<ConsoleErrorEntry['level'], string> = {
   error: 'Error',
@@ -68,7 +75,10 @@ function numberedSteps(interactions: ContextSnapshot['interactions']): string[] 
   const lines: string[] = []
   let number = 0
 
-  for (const step of interactions) {
+  const deduplicated = cleanAndDeduplicateInteractions(interactions)
+  const actionSteps = deduplicated.filter((step) => step.type !== 'assertion')
+
+  for (const step of actionSteps) {
     if (step.type === 'marker') {
       if (lines.length > 0) {
         lines.push('')
@@ -79,10 +89,11 @@ function numberedSteps(interactions: ContextSnapshot['interactions']): string[] 
     }
 
     number += 1
-    lines.push(`${number}. ${describeStep(step)}`)
+    const expectedSuffix = step.customExpected ? ` (Expected: ${step.customExpected})` : ''
+    lines.push(`${number}. ${describeStep(step)}${expectedSuffix}`)
   }
 
-  return lines
+  return lines.length > 0 ? lines : ['No interactions were captured.']
 }
 
 function networkSection(snapshot: ContextSnapshot): string[] {
@@ -119,14 +130,23 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
     (step) => step.type === 'assertion' && step.assertion?.isViolation,
   )
 
+  const customExpectedSteps = interactions.filter(
+    (step) => step.type !== 'assertion' && Boolean(step.customExpected),
+  )
+
   const expectedSection =
-    failedAssertions.length > 0
+    failedAssertions.length > 0 || customExpectedSteps.length > 0
       ? [
           ...failedAssertions.map(
             (step) =>
               `- ${formatExpectedAssertion(step)}${
-                step.assertion?.message ? ` (${step.assertion.message})` : ''
+                step.assertion?.message && formatExpectedAssertion(step) !== step.assertion.message
+                  ? ` (${step.assertion.message})`
+                  : ''
               }`,
+          ),
+          ...customExpectedSteps.map(
+            (step) => `- ${describeStep(step)}: ${step.customExpected}`,
           ),
         ]
       : ['_What should have happened._']
@@ -134,12 +154,14 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
   const actualSection =
     failedAssertions.length > 0
       ? [
-          '### ❌ Failed Assertion (Observed Bug)',
+          '### Failed Assertion (Observed Bug)',
           '',
           ...failedAssertions.flatMap((step) => [
             `- **Expected**: ${formatExpectedAssertion(step)}`,
             `  **Actual**: ${formatActualAssertion(step)}`,
-            ...(step.assertion?.message ? [`  **Reason**: ${step.assertion.message}`] : []),
+            ...(step.assertion?.message && formatExpectedAssertion(step) !== step.assertion.message
+              ? [`  **Reason**: ${step.assertion.message}`]
+              : []),
             '',
           ]),
           ...(consoleErrors.length > 0
@@ -184,6 +206,15 @@ export function generateMarkdownReport(snapshot: ContextSnapshot): string {
     ...consoleSection(consoleErrors),
     '## Additional context',
     '',
+    ...(snapshot.qaseCaseCode
+      ? [
+          `- Associated Qase Test Case: [${snapshot.qaseCaseCode}](${formatQaseCaseUrl(
+            snapshot.qaseProjectCode || snapshot.qaseCaseCode.split('-')[0] || 'SQA',
+            snapshot.qaseCaseId || snapshot.qaseCaseCode,
+            snapshot.qaseSuiteId,
+          )})`,
+        ]
+      : []),
     `- Final URL: ${finalUrl}`,
     `- Interactions captured: ${interactions.length}`,
     `- User agent: \`${environment.userAgent}\``,

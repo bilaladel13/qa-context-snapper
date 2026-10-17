@@ -22,6 +22,7 @@ export interface CaptureSettings {
   trackKeyboard: boolean
   trackNetwork: boolean
   testIdAttributes: string
+  autoMergeConsecutiveSteps: boolean
 }
 
 // The Jira credentials live in their own storage key. Only the non secret
@@ -62,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
     trackKeyboard: true,
     trackNetwork: true,
     testIdAttributes: 'data-testid, data-test-id, data-test, data-qa, data-cy',
+    autoMergeConsecutiveSteps: true,
   },
   jira: {
     projectKey: '',

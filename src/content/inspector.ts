@@ -4,7 +4,7 @@ import { resolveTarget } from './locator'
 import type { AssertionDetail, ElementTarget } from '@/types'
 
 const HOST_ID = 'qa-context-snapper-inspector'
-const PANEL_WIDTH = 300
+const PANEL_WIDTH = 340
 const MARGIN = 8
 
 const STYLES = `
@@ -63,7 +63,7 @@ const STYLES = `
 .panel {
   position: fixed;
   width: ${PANEL_WIDTH}px;
-  max-height: 320px;
+  max-height: 440px;
   overflow-y: auto;
   border-radius: 10px;
   background: #0f172a;
@@ -122,6 +122,12 @@ const STYLES = `
   white-space: nowrap;
 }
 .row button.add:hover { background: #334155; }
+.row button.add.selected {
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px #60a5fa;
+}
 .row input {
   all: unset;
   flex: 1;
@@ -146,18 +152,63 @@ const STYLES = `
 .reason {
   position: sticky;
   bottom: 0;
-  padding: 6px;
+  padding: 8px 10px;
   background: #0f172a;
   border-top: 1px solid #1e293b;
 }
-.reason input { width: 100%; box-sizing: border-box; }
-.reason.armed input { border-color: #2563eb; }
+.reason label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 4px;
+}
+.reason input {
+  all: unset;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #020617;
+  border: 1px solid #334155;
+  color: #f8fafc;
+  font-size: 11px;
+}
+.reason input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+.reason.armed input {
+  border-color: #3b82f6;
+  background: #020617;
+}
 .reason .note {
-  margin: 4px 6px 0;
-  color: #64748b;
+  margin: 4px 2px 6px;
+  color: #94a3b8;
   font-size: 10px;
 }
-.reason.armed .note { color: #60a5fa; }
+.reason.armed .note {
+  color: #60a5fa;
+}
+.confirm-btn {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  transition: background 0.15s ease;
+}
+.confirm-btn:hover {
+  background: #1d4ed8;
+}
 `
 
 export interface InspectorHandlers {
@@ -283,47 +334,6 @@ export function openInspector(handlers: InspectorHandlers): void {
     flash(reason ? `Added: ${option.label}, with reason` : `Added: ${option.label}`)
   }
 
-  const buildRow = (
-    target: ElementTarget | null,
-    option: AssertionOption,
-    container: HTMLElement,
-    element: Element | null,
-  ) => {
-    const row = document.createElement('div')
-    row.className = 'row'
-
-    if (!option.editable) {
-      const button = document.createElement('button')
-      button.className = 'add'
-      button.textContent = option.label
-      button.addEventListener('click', () => record(target, option, '', element))
-      row.append(button)
-    } else {
-      const input = document.createElement('input')
-      input.value = option.expected ?? ''
-      input.title = option.label
-      input.setAttribute('aria-label', option.label)
-
-      const save = document.createElement('button')
-      save.className = 'save'
-      save.textContent = option.kind === 'attribute' ? option.attribute ?? 'Set' : option.label
-
-      const commit = () => record(target, option, input.value, element)
-
-      save.addEventListener('click', commit)
-      input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          commit()
-        }
-      })
-
-      row.append(input, save)
-    }
-
-    container.append(row)
-  }
-
   const openPanel = (element: Element) => {
     closePanel()
 
@@ -346,6 +356,99 @@ export function openInspector(handlers: InspectorHandlers): void {
 
     header.append(label, close)
     panel.append(header)
+
+    let selectedTarget: ElementTarget | null = target
+    let selectedOption: AssertionOption | null = null
+    let selectedValue = ''
+    let selectedEl: Element | null = element
+    const allButtons: HTMLButtonElement[] = []
+
+    const updateSelection = (
+      btn: HTMLButtonElement,
+      option: AssertionOption,
+      t: ElementTarget | null,
+      el: Element | null,
+      val = '',
+    ) => {
+      selectedTarget = t
+      selectedOption = option
+      selectedValue = val
+      selectedEl = el
+      for (const b of allButtons) {
+        b.classList.remove('selected')
+      }
+      btn.classList.add('selected')
+    }
+
+    const buildRow = (
+      t: ElementTarget | null,
+      option: AssertionOption,
+      container: HTMLElement,
+      el: Element | null,
+    ) => {
+      const row = document.createElement('div')
+      row.className = 'row'
+      const displayLabel = option.kind === 'hidden' ? 'should be hidden' : option.label
+
+      if (!option.editable) {
+        const button = document.createElement('button')
+        button.className = 'add'
+        button.textContent = displayLabel
+        allButtons.push(button)
+
+        if (selectedOption === null) {
+          updateSelection(button, option, t, el, '')
+        }
+
+        button.addEventListener('click', () => {
+          updateSelection(button, option, t, el, '')
+        })
+
+        button.addEventListener('dblclick', () => {
+          record(t, option, '', el)
+        })
+
+        row.append(button)
+      } else {
+        const input = document.createElement('input')
+        input.value = option.expected ?? ''
+        input.title = option.label
+        input.setAttribute('aria-label', option.label)
+
+        const save = document.createElement('button')
+        save.className = 'save'
+        save.textContent = option.kind === 'attribute' ? option.attribute ?? 'Set' : displayLabel
+
+        input.addEventListener('input', () => {
+          if (selectedOption === option) {
+            selectedValue = input.value
+          }
+        })
+
+        const selectThis = () => {
+          updateSelection(save as unknown as HTMLButtonElement, option, t, el, input.value)
+        }
+
+        input.addEventListener('focus', selectThis)
+
+        const commit = () => {
+          selectThis()
+          record(t, option, input.value, el)
+        }
+
+        save.addEventListener('click', commit)
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+          }
+        })
+
+        row.append(input, save)
+      }
+
+      container.append(row)
+    }
 
     const elementGroup = document.createElement('div')
     elementGroup.className = 'group'
@@ -372,24 +475,51 @@ export function openInspector(handlers: InspectorHandlers): void {
     const reason = document.createElement('div')
     reason.className = 'reason'
 
+    const reasonLabel = document.createElement('label')
+    reasonLabel.textContent = 'Expected Result (in your own words)'
+
     const reasonInput = document.createElement('input')
-    reasonInput.placeholder = 'Failure reason (optional)'
+    reasonInput.placeholder = 'Expected result in your own words (optional)...'
     reasonInput.maxLength = MAX_MESSAGE_LENGTH
-    reasonInput.setAttribute('aria-label', 'Failure reason')
+    reasonInput.setAttribute('aria-label', 'Expected result in your own words (optional)...')
 
     const note = document.createElement('div')
     note.className = 'note'
-    note.textContent = 'Shown by Playwright when the assertion fails'
+    note.textContent = 'Saved in Qase, Jira, and Markdown reports'
 
     reasonInput.addEventListener('input', () => {
       const armed = reasonInput.value.trim().length > 0
       reason.classList.toggle('armed', armed)
       note.textContent = armed
-        ? 'Attached to the next assertion you add'
-        : 'Shown by Playwright when the assertion fails'
+        ? 'Attached to the confirmed assertion'
+        : 'Saved in Qase, Jira, and Markdown reports'
     })
 
-    reason.append(reasonInput, note)
+    const confirmBtn = document.createElement('button')
+    confirmBtn.type = 'button'
+    confirmBtn.className = 'confirm-btn'
+    confirmBtn.textContent = 'Confirm Assertion'
+
+    const handleConfirm = () => {
+      if (!selectedOption) {
+        const first = suggestAssertions(element, target)[0]
+        if (first) {
+          record(target, first, first.expected ?? '', element)
+        }
+        return
+      }
+      record(selectedTarget, selectedOption, selectedValue, selectedEl)
+    }
+
+    confirmBtn.addEventListener('click', handleConfirm)
+    reasonInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleConfirm()
+      }
+    })
+
+    reason.append(reasonLabel, reasonInput, note, confirmBtn)
     readReason = () => reasonInput.value
 
     panel.append(elementGroup, pageGroup, reason)

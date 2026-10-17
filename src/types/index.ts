@@ -136,6 +136,8 @@ export interface InteractionEvent {
   assertion?: AssertionDetail
   url: string
   timestamp: number
+  customAction?: string
+  customExpected?: string
 }
 
 export interface ContextSnapshot {
@@ -146,6 +148,12 @@ export interface ContextSnapshot {
   interactions: InteractionEvent[]
   startedAt: number
   stoppedAt: number
+  sessionTitle?: string | null
+  qaseCaseCode?: string | null
+  qaseProjectCode?: string | null
+  qaseSuiteId?: number | null
+  qaseCaseId?: number | null
+  qaseCaseTitle?: string | null
 }
 
 export interface GeneratedReport {
@@ -171,6 +179,7 @@ export interface RecorderState {
   tabId: number | null
   tabUrl: string | null
   tabTitle: string | null
+  sessionTitle?: string | null
   startedAt: number | null
   stoppedAt: number | null
   interactionCount: number
@@ -180,4 +189,9 @@ export interface RecorderState {
   screenshot: ScreenshotMeta | null
   screenshotError: string | null
   report: GeneratedReport | null
+  qaseCaseCode?: string | null
+  qaseProjectCode?: string | null
+  qaseSuiteId?: number | null
+  qaseCaseId?: number | null
+  qaseCaseTitle?: string | null
 }

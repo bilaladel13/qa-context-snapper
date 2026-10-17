@@ -85,11 +85,80 @@ export function resolveStrategy(
   return { strategy: 'css', value: target.cssSelector }
 }
 
-export function describeTarget(target: ElementTarget | null): string {
+function humanizeId(id: string): string {
+  const stripped = id.replace(/[-_]?(btn|button|input|field|select|checkbox)$/i, '')
+  if (!stripped) return id
+  return stripped
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+export function describeHumanTarget(target: ElementTarget | null): string {
   if (!target) {
     return 'the page'
   }
 
+  const tagName = target.tagName?.toLowerCase() ?? ''
+  const role = target.role?.toLowerCase() ?? (target.strategy === 'role' ? target.value.toLowerCase() : '')
+
+  const label = target.candidates?.label?.value || (target.strategy === 'label' ? target.value : undefined)
+  const accessibleName =
+    target.accessibleName ||
+    (target.strategy === 'role' && target.value !== target.accessibleName ? target.accessibleName : undefined)
+  const placeholder =
+    target.candidates?.placeholder?.value || (target.strategy === 'placeholder' ? target.value : undefined)
+  const visibleText =
+    target.candidates?.text?.value || target.textSnippet || (target.strategy === 'text' ? target.value : undefined)
+
+  // 1. Buttons
+  const isButton = tagName === 'button' || role === 'button' || target.value?.toLowerCase().includes('button')
+  if (isButton) {
+    const buttonText =
+      accessibleName || visibleText || label || (target.strategy === 'testId' ? humanizeId(target.value) : undefined)
+    if (buttonText) {
+      return `"${buttonText}" button`
+    }
+    return 'button'
+  }
+
+  // 2. Checkboxes
+  const isCheckbox =
+    role === 'checkbox' ||
+    (tagName === 'input' && (target.cssSelector?.includes('checkbox') || target.value?.includes('checkbox')))
+  if (isCheckbox) {
+    const checkboxName = label || accessibleName || (target.strategy === 'testId' ? humanizeId(target.value) : undefined)
+    if (checkboxName) {
+      return `"${checkboxName}" checkbox`
+    }
+    return 'checkbox'
+  }
+
+  // 3. Inputs / Textareas / Selects / Form controls
+  const isField =
+    ['input', 'textarea', 'select'].includes(tagName) ||
+    ['textbox', 'combobox', 'searchbox', 'spinbutton'].includes(role)
+  if (isField) {
+    const fieldName = label || accessibleName || placeholder || (target.strategy === 'testId' ? humanizeId(target.value) : undefined)
+    if (fieldName) {
+      return `"${fieldName}" field`
+    }
+  }
+
+  // 4. Other elements with human-readable attributes
+  if (label) {
+    return `the field labelled "${label}"`
+  }
+  if (accessibleName) {
+    return `"${accessibleName}"`
+  }
+  if (placeholder) {
+    return `the field with placeholder "${placeholder}"`
+  }
+  if (visibleText && visibleText.trim().length > 0 && visibleText.length < 50) {
+    return `"${visibleText.trim()}"`
+  }
+
+  // Fallback to standard locator strategy
   switch (target.strategy) {
     case 'testId':
       return `the element with test id "${target.value}"`
@@ -108,9 +177,16 @@ export function describeTarget(target: ElementTarget | null): string {
   }
 }
 
+export function describeTarget(target: ElementTarget | null): string {
+  return describeHumanTarget(target)
+}
+
 export function describeAssertion(step: InteractionEvent): string {
+  if (step.customAction) {
+    return step.customAction
+  }
   const claim = describeClaim(step)
-  const reason = step.assertion?.message
+  const reason = step.customExpected || step.assertion?.message
 
   return reason ? `${claim}, because ${reason}` : claim
 }
@@ -160,7 +236,13 @@ function describeClaim(step: InteractionEvent): string {
 }
 
 export function formatExpectedAssertion(step: InteractionEvent): string {
+  if (step.customExpected) {
+    return step.customExpected
+  }
   const detail = step.assertion
+  if (detail?.message) {
+    return detail.message
+  }
   if (!detail) return describeStep(step)
   const subject = describeTarget(step.target)
   const expected = detail.expected ?? ''
@@ -233,7 +315,52 @@ export function formatActualAssertion(step: InteractionEvent): string {
   return `Observed state did not match expected ${detail.kind}`
 }
 
+export function isCheckboxOrRadio(target: ElementTarget | null): boolean {
+  if (!target) return false
+  const role = target.role?.toLowerCase() || target.candidates?.role?.value?.toLowerCase()
+  if (role === 'checkbox' || role === 'radio') return true
+
+  const css = (target.cssSelector || '').toLowerCase()
+  if (
+    css.includes('checkbox') ||
+    css.includes('radio') ||
+    css.includes('type="checkbox"') ||
+    css.includes("type='checkbox'") ||
+    css.includes('type="radio"') ||
+    css.includes("type='radio'")
+  ) {
+    return true
+  }
+
+  const val = (target.value || '').toLowerCase()
+  if (val.includes('checkbox') || val.includes('radio')) return true
+
+  const testId = (target.candidates?.testId?.value || '').toLowerCase()
+  if (testId.includes('checkbox') || testId.includes('radio')) return true
+
+  return false
+}
+
+export function formatQaseCaseUrl(
+  projectCode: string,
+  caseId: number | string,
+  suiteId?: number | null,
+): string {
+  const cleanCode = (projectCode || 'SQA').toUpperCase()
+  const rawIdStr = String(caseId).trim()
+  const numericId = rawIdStr.replace(/^[A-Za-z0-9_-]+-/, '')
+
+  if (suiteId != null) {
+    return `https://app.qase.io/project/${cleanCode}?suite=${suiteId}&previewMode=modal&case=${numericId}`
+  }
+  return `https://app.qase.io/project/${cleanCode}?previewMode=modal&case=${numericId}`
+}
+
 export function describeStep(step: InteractionEvent): string {
+  if (step.customAction) {
+    return step.customAction
+  }
+
   switch (step.type) {
     case 'marker':
       return step.value ?? 'Step'
@@ -242,11 +369,28 @@ export function describeStep(step: InteractionEvent): string {
     case 'navigation':
       return `Navigate to ${step.value ?? 'the page'}`
     case 'click':
-      return `Click ${describeTarget(step.target)}`
-    case 'input':
-      return `Type ${step.masked ? 'the secret value' : `"${step.value ?? ''}"`} into ${describeTarget(step.target)}`
-    case 'change':
+    case 'change': {
+      const isCheck =
+        isCheckboxOrRadio(step.target) ||
+        (step.target?.tagName?.toLowerCase() === 'input' && (step.value === 'true' || step.value === 'false'))
+      if (isCheck) {
+        const label =
+          step.target?.candidates?.label?.value ||
+          step.target?.accessibleName ||
+          step.target?.textSnippet ||
+          describeHumanTarget(step.target)
+        const isRadio = step.target?.role?.toLowerCase() === 'radio'
+        const verb = step.value === 'false' ? 'Uncheck' : 'Check'
+        const elementKind = isRadio ? 'radio button' : 'checkbox'
+        return `${verb} "${label.replace(/^"|"$/g, '')}" ${elementKind}`
+      }
+      if (step.type === 'click') {
+        return `Click ${describeTarget(step.target)}`
+      }
       return `Set ${describeTarget(step.target)} to "${step.value ?? ''}"`
+    }
+    case 'input':
+      return `Enter ${step.masked ? 'the secret value' : `"${step.value ?? ''}"`} into ${describeTarget(step.target)}`
     case 'submit':
       return `Submit ${describeTarget(step.target)}`
     case 'keydown':
@@ -286,4 +430,185 @@ export function relativizeUrl(url: string, baseOrigin: string | null): string {
   } catch {
     return url
   }
+}
+
+function isSameTarget(a: ElementTarget | null, b: ElementTarget | null): boolean {
+  if (!a || !b) return false
+  if (a.cssSelector && b.cssSelector && a.cssSelector === b.cssSelector) return true
+  if (
+    a.candidates?.testId?.value &&
+    b.candidates?.testId?.value &&
+    a.candidates.testId.value === b.candidates.testId.value
+  ) {
+    return true
+  }
+  if (a.value && b.value && a.value === b.value && a.strategy === b.strategy) return true
+  if (a.accessibleName && b.accessibleName && a.accessibleName === b.accessibleName) return true
+  return false
+}
+
+function isLabelForInput(labelTarget: ElementTarget | null, inputTarget: ElementTarget | null): boolean {
+  if (!labelTarget || !inputTarget) return false
+  const isLabel = labelTarget.tagName?.toLowerCase() === 'label'
+  const isInput = inputTarget.tagName?.toLowerCase() === 'input'
+  if (!isLabel && !isInput) return false
+
+  if (labelTarget.accessibleName && inputTarget.accessibleName) {
+    if (labelTarget.accessibleName === inputTarget.accessibleName) return true
+  }
+  const labelText =
+    labelTarget.textSnippet || labelTarget.accessibleName || labelTarget.candidates?.text?.value
+  const inputLabel = inputTarget.candidates?.label?.value || inputTarget.accessibleName
+  if (
+    labelText &&
+    inputLabel &&
+    (labelText === inputLabel || labelText.includes(inputLabel) || inputLabel.includes(labelText))
+  ) {
+    return true
+  }
+  return false
+}
+
+export function cleanAndDeduplicateInteractions(
+  interactions: InteractionEvent[],
+): InteractionEvent[] {
+  const result: InteractionEvent[] = []
+
+  for (let i = 0; i < interactions.length; i++) {
+    const current = interactions[i]
+    if (!current) continue
+
+    // 1. Ignore redundant container clicks on <form> elements
+    if (
+      current.type === 'click' &&
+      current.target?.tagName?.toLowerCase() === 'form'
+    ) {
+      continue
+    }
+
+    // 2. Trailing submit event deduplication (e.g. form submit after clicking submit button)
+    if (current.type === 'submit') {
+      const prev = result[result.length - 1]
+      if (prev && (prev.type === 'click' || prev.type === 'keydown')) {
+        if (current.customExpected && !prev.customExpected) {
+          prev.customExpected = current.customExpected
+        }
+        if (current.customAction && !prev.customAction) {
+          prev.customAction = current.customAction
+        }
+        if (current.assertion && !prev.assertion) {
+          prev.assertion = current.assertion
+        }
+        continue // Drop redundant submit
+      }
+    }
+
+    const next = interactions[i + 1]
+
+    if (next) {
+      const currentIsCheck = isCheckboxOrRadio(current.target)
+      const nextIsCheck = isCheckboxOrRadio(next.target)
+
+      // 3. Checkbox/Radio pair: click followed by change (or label click followed by checkbox change)
+      if (
+        (currentIsCheck || nextIsCheck) &&
+        current.type === 'click' &&
+        (next.type === 'change' || next.type === 'click') &&
+        (isSameTarget(current.target, next.target) || isLabelForInput(current.target, next.target))
+      ) {
+        const target = next.target?.tagName?.toLowerCase() === 'input' ? next.target : current.target
+        const merged: InteractionEvent = {
+          ...current,
+          type: 'click',
+          target,
+          value: next.value ?? current.value ?? 'true',
+          customExpected: current.customExpected || next.customExpected,
+          customAction: current.customAction || next.customAction,
+          assertion: current.assertion || next.assertion,
+        }
+        result.push(merged)
+        i++ // Skip redundant change
+        continue
+      }
+
+      // 4. Redundant click on input/textarea/select immediately followed by input or change
+      const isInputClick =
+        current.type === 'click' &&
+        Boolean(current.target?.tagName) &&
+        ['input', 'textarea', 'select'].includes(current.target?.tagName?.toLowerCase() ?? '') &&
+        !currentIsCheck
+
+      if (
+        isInputClick &&
+        (next.type === 'input' || next.type === 'change') &&
+        (isSameTarget(current.target, next.target) ||
+          (Boolean(current.target?.accessibleName) &&
+            current.target?.accessibleName === next.target?.accessibleName))
+      ) {
+        if (current.customExpected && !next.customExpected) {
+          next.customExpected = current.customExpected
+        }
+        if (current.customAction && !next.customAction) {
+          next.customAction = current.customAction
+        }
+        if (current.assertion && !next.assertion) {
+          next.assertion = current.assertion
+        }
+        continue // Drop the redundant click, keep the input/change
+      }
+
+      // 5. Button click followed immediately by submit event on parent form
+      if (current.type === 'click' && next.type === 'submit') {
+        const merged: InteractionEvent = {
+          ...current,
+          customExpected: current.customExpected || next.customExpected,
+          customAction: current.customAction || next.customAction,
+          assertion: current.assertion || next.assertion,
+        }
+        result.push(merged)
+        i++ // Skip redundant submit event
+        continue
+      }
+    }
+
+    result.push(current)
+  }
+
+  return result
+}
+
+export function formatSpecFilename(
+  sessionTitle: string,
+  qaseCaseCode?: string | null,
+): string {
+  let cleanTitle = sessionTitle.trim()
+  let effectiveCode = qaseCaseCode?.trim().toLowerCase() || null
+
+  const bracketMatch = cleanTitle.match(/^\[([A-Za-z0-9_-]+)\]\s*(.*)$/)
+  if (bracketMatch) {
+    if (!effectiveCode) {
+      effectiveCode = bracketMatch[1].toLowerCase()
+    }
+    cleanTitle = bracketMatch[2].trim()
+  }
+
+  cleanTitle = cleanTitle.replace(/[\[\]]/g, ' ')
+
+  let slug = cleanTitle
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (!slug) {
+    slug = 'recorded-session'
+  }
+
+  if (effectiveCode) {
+    const codeSlug = effectiveCode.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+    if (!slug.startsWith(codeSlug)) {
+      slug = `${codeSlug}-${slug}`
+    }
+  }
+
+  return `${slug}.spec.ts`
 }

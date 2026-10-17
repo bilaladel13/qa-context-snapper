@@ -6,10 +6,12 @@ import {
   isJiraRequest,
   isPopupQuery,
   isPopupRequest,
+  isQaseRequest,
   ok,
 } from '@/messaging/protocol'
 import { startDownload } from './downloads'
 import { handleJiraRequest } from './jira'
+import { handleQaseRequest } from './qase'
 import type {
   ActiveTabInfo,
   ContentToBackground,
@@ -19,8 +21,9 @@ import type {
   Result,
 } from '@/messaging/protocol'
 import { generateReport } from '@/generator'
+import { cleanAndDeduplicateInteractions } from '@/generator/shared'
 import { loadSettings, onSettingsChanged } from '@/settings/store'
-import type { ContextSnapshot, EnvironmentSnapshot } from '@/types'
+import type { ContextSnapshot, EnvironmentSnapshot, RecorderState } from '@/types'
 import { captureTab } from './screenshot'
 import {
   appendConsoleError,
@@ -32,6 +35,8 @@ import {
   getState,
   readScreenshot,
   removeStep,
+  updateStep,
+  updateSessionTitle,
   setEnvironment,
   updateState,
   writeScreenshot,
@@ -74,7 +79,12 @@ async function setBadge(recording: boolean): Promise<void> {
   }
 }
 
-async function startRecording(): Promise<PopupResponse> {
+async function startRecording(qaseContext?: {
+  projectCode?: string | null
+  suiteId?: number | null
+  caseId?: number | null
+  caseTitle?: string | null
+}): Promise<PopupResponse> {
   const tab = await getActiveTab()
 
   if (!tab.ok) {
@@ -92,12 +102,22 @@ async function startRecording(): Promise<PopupResponse> {
 
   await installConsoleCapture(tabId, sessionId)
 
+  const qaseCaseCode =
+    qaseContext?.caseId && qaseContext?.projectCode
+      ? `${qaseContext.projectCode}-${qaseContext.caseId}`
+      : null
+
   const state = await beginSession(sessionId, {
     status: 'recording',
     tabId,
     tabUrl: tab.data.url ?? null,
     tabTitle: tab.data.title ?? null,
     startedAt: Date.now(),
+    qaseProjectCode: qaseContext?.projectCode ?? null,
+    qaseSuiteId: qaseContext?.suiteId ?? null,
+    qaseCaseId: qaseContext?.caseId ?? null,
+    qaseCaseTitle: qaseContext?.caseTitle ?? null,
+    qaseCaseCode,
   })
 
   const started = await sendToTab(tabId, { type: 'CONTENT_START_RECORDING', sessionId })
@@ -134,30 +154,63 @@ async function stopRecording(): Promise<PopupResponse> {
   const buffer = await getBuffer()
   const stoppedAt = Date.now()
 
+  const qaseCaseCode =
+    state.qaseCaseCode ||
+    (state.qaseProjectCode && state.qaseCaseId
+      ? `${state.qaseProjectCode}-${state.qaseCaseId}`
+      : null)
+
+  const sessionTitle = state.qaseCaseTitle
+    ? (qaseCaseCode && !state.qaseCaseTitle.includes(qaseCaseCode)
+        ? `[${qaseCaseCode}] ${state.qaseCaseTitle}`
+        : state.qaseCaseTitle)
+    : (state.tabTitle || 'QA Recording Session')
+
+  const rawInteractions = buffer?.interactions ?? []
+  const cleanInteractions = cleanAndDeduplicateInteractions(rawInteractions)
+
   const snapshot: ContextSnapshot = {
     sessionId: state.sessionId,
     environment: buffer?.environment ?? {
       ...FALLBACK_ENVIRONMENT,
       pageUrl: state.tabUrl ?? '',
-      pageTitle: state.tabTitle ?? '',
+      pageTitle: sessionTitle,
     },
-    interactions: buffer?.interactions ?? [],
+    interactions: cleanInteractions,
     consoleErrors: buffer?.consoleErrors ?? [],
     network: buffer?.network ?? [],
     startedAt: state.startedAt ?? stoppedAt,
     stoppedAt,
+    sessionTitle,
+    qaseCaseCode,
+    qaseProjectCode: state.qaseProjectCode,
+    qaseSuiteId: state.qaseSuiteId,
+    qaseCaseId: state.qaseCaseId,
+    qaseCaseTitle: state.qaseCaseTitle,
   }
 
   await setBadge(false)
+
+  const settings = await loadSettings()
+  const report = generateReport(snapshot, {
+    ...settings,
+    playwright: { ...settings.playwright, testTitle: sessionTitle },
+  })
 
   return ok(
     await updateState({
       status: 'result',
       stoppedAt,
       snapshot,
+      sessionTitle,
+      qaseCaseCode,
+      qaseProjectCode: state.qaseProjectCode,
+      qaseSuiteId: state.qaseSuiteId,
+      qaseCaseId: state.qaseCaseId,
+      qaseCaseTitle: state.qaseCaseTitle,
       screenshot: capture?.ok ? capture.data.meta : null,
       screenshotError: capture && !capture.ok ? capture.error : null,
-      report: generateReport(snapshot, await loadSettings()),
+      report,
       interactionCount: snapshot.interactions.length,
       consoleErrorCount: snapshot.consoleErrors.length,
     }),
@@ -222,14 +275,167 @@ async function handlePopupRequest(request: PopupRequest): Promise<PopupResponse>
     case 'GET_STATE':
       return ok(await getState())
     case 'START_RECORDING':
-      return startRecording()
+      return startRecording(request.qaseContext)
     case 'STOP_RECORDING':
       return stopRecording()
     case 'RESET_RECORDING':
       return resetRecording()
     case 'DELETE_STEP':
       return ok(await removeStep(request.stepId))
+    case 'UPDATE_STEP':
+      return ok(await updateStep(request.stepId, request.patch))
+    case 'UPDATE_SESSION_TITLE':
+      return ok(await updateSessionTitle(request.title))
+    case 'LOAD_DEMO_RESULT':
+      return loadDemoResult()
   }
+}
+
+async function loadDemoResult(): Promise<PopupResponse> {
+  const startedAt = Date.now() - 25000
+  const stoppedAt = Date.now()
+  const sessionTitle = '[SQA-3] [Negative] Reject invalid email format'
+  const snapshot: ContextSnapshot = {
+    sessionId: 'demo-session',
+    startedAt,
+    stoppedAt,
+    sessionTitle,
+    qaseCaseCode: 'SQA-3',
+    qaseProjectCode: 'SQA',
+    qaseCaseId: 3,
+    qaseCaseTitle: '[Negative] Reject invalid email format',
+    environment: {
+      browser: 'Google Chrome',
+      browserVersion: '141.0.0.0',
+      os: 'Windows 11',
+      screenSize: '1920x1080',
+      viewportSize: '1280x720',
+      devicePixelRatio: 1,
+      language: 'ar-SA',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      pageUrl: 'http://localhost:5173/?qaBugMode=1',
+      pageTitle: 'Member Directory & Registration',
+      capturedAt: new Date(startedAt).toISOString(),
+    },
+    interactions: [
+      {
+        id: 'step-nav',
+        type: 'navigation',
+        target: null,
+        value: 'http://localhost:5173/?qaBugMode=1',
+        url: 'http://localhost:5173/?qaBugMode=1',
+        timestamp: startedAt + 1000,
+      },
+      {
+        id: 'step-click-email',
+        type: 'click',
+        target: {
+          strategy: 'css',
+          value: '#member-email',
+          tagName: 'input',
+          cssSelector: '#member-email',
+        },
+        url: 'http://localhost:5173/?qaBugMode=1',
+        timestamp: startedAt + 3000,
+      },
+      {
+        id: 'step-type-email',
+        type: 'input',
+        target: {
+          strategy: 'css',
+          value: '#member-email',
+          tagName: 'input',
+          cssSelector: '#member-email',
+        },
+        value: 'محمد',
+        url: 'http://localhost:5173/?qaBugMode=1',
+        timestamp: startedAt + 4500,
+      },
+      {
+        id: 'step-click-submit',
+        type: 'click',
+        target: {
+          strategy: 'role',
+          value: 'button',
+          accessibleName: 'Add Member',
+          tagName: 'button',
+          cssSelector: 'button#btn-submit',
+        },
+        url: 'http://localhost:5173/?qaBugMode=1',
+        timestamp: startedAt + 7000,
+      },
+      {
+        id: 'step-assert-hidden',
+        type: 'assertion',
+        target: {
+          strategy: 'text',
+          value: 'محمد',
+          tagName: 'td',
+          cssSelector: 'td.member-name',
+        },
+        assertion: {
+          kind: 'hidden',
+          expected: 'hidden',
+          actual: 'visible',
+          isViolation: true,
+          message: 'Element "member-name" with text "محمد" should be hidden / not exist',
+        },
+        url: 'http://localhost:5173/?qaBugMode=1',
+        timestamp: startedAt + 8500,
+      },
+    ],
+    consoleErrors: [
+      {
+        id: 'err-1',
+        level: 'error',
+        origin: 'console',
+        message: 'Validation failed: Invalid email format (missing @domain)',
+        source: 'app.js',
+        lineNumber: 42,
+        timestamp: startedAt + 7500,
+      },
+    ],
+    network: [
+      {
+        id: 'net-1',
+        method: 'POST',
+        url: 'http://localhost:5173/api/members',
+        status: 422,
+        outcome: 'failed',
+        durationMs: 85,
+        timestamp: startedAt + 7200,
+      },
+    ],
+  }
+
+  const settings = await loadSettings()
+  const report = generateReport(snapshot, {
+    ...settings,
+    playwright: { ...settings.playwright, testTitle: sessionTitle },
+  })
+  const next: RecorderState = {
+    status: 'result',
+    sessionId: 'demo-session',
+    tabId: null,
+    tabUrl: snapshot.environment.pageUrl,
+    tabTitle: snapshot.environment.pageTitle,
+    startedAt,
+    stoppedAt,
+    interactionCount: snapshot.interactions.length,
+    consoleErrorCount: snapshot.consoleErrors.length,
+    networkFailureCount: 1,
+    snapshot,
+    screenshot: null,
+    screenshotError: null,
+    report,
+    sessionTitle,
+    qaseCaseCode: 'SQA-3',
+    qaseProjectCode: 'SQA',
+    qaseCaseId: 3,
+    qaseCaseTitle: '[Negative] Reject invalid email format',
+  }
+  await updateState(next)
+  return ok(next)
 }
 
 async function toggleAssertionMode(): Promise<Result<{ assertionMode: boolean }>> {
@@ -345,6 +551,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isJiraRequest(message)) {
     return respond(handleJiraRequest(message), sendResponse)
+  }
+
+  if (isQaseRequest(message)) {
+    return respond(handleQaseRequest(message), sendResponse)
   }
 
   if (isDownloadRequest(message)) {

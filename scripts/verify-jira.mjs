@@ -308,6 +308,19 @@ check('payload round trips as utf-8', decoded === utf8Sample, JSON.stringify(dec
   check('and stays silent when there is none', !without.includes('screenshot of the page'))
 }
 
+// Clickable Qase Test Case link in Jira ADF panel
+{
+  const withQase = buildDescription(snapshot, {
+    playwrightScript: null,
+    qaseCaseCode: 'SQA-3',
+  })
+  const jsonStr = JSON.stringify(withQase)
+
+  check('Jira description includes Associated Qase Test Case text', jsonStr.includes('Associated Qase Test Case:'))
+  check('Jira description includes clickable ADF link for SQA-3', jsonStr.includes('"href":"https://app.qase.io/project/SQA?previewMode=modal&case=3"'))
+  check('Jira ADF document with Qase link stays valid', findProblems(withQase).length === 0, findProblems(withQase).join('; '))
+}
+
 for (const entry of results) {
   process.stdout.write(`${entry.passed ? 'ok  ' : 'FAIL'}  ${entry.name}\n`)
   if (!entry.passed && entry.detail) {

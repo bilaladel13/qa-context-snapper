@@ -177,10 +177,10 @@ console.log('\nGenerated Markdown Bug Report:\n')
 console.log(markdownReport)
 
 // Verifications on the generated output
-if (!markdownReport.includes('❌ Failed Assertion (Observed Bug)')) {
-  throw new Error('Markdown report does not contain "❌ Failed Assertion (Observed Bug)"')
+if (!markdownReport.includes('Failed Assertion (Observed Bug)')) {
+  throw new Error('Markdown report does not contain "Failed Assertion (Observed Bug)"')
 }
-if (!markdownReport.includes('**Expected**: the element with test id "member-email" should be hidden / not exist')) {
+if (!markdownReport.includes('**Expected**: invalid email "محمد" must not be added to the directory')) {
   throw new Error('Markdown report does not contain expected description')
 }
 if (!markdownReport.includes('**Actual**: the element with test id "member-email" is visible (it is present in the DOM)')) {

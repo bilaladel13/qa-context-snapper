@@ -11,6 +11,8 @@ import { clearCredentials, normalizeDomain, readCredentials, writeCredentials } 
 import type { JiraConnection } from '@/jira/types'
 import { fail, ok } from '@/messaging/protocol'
 import type { JiraRequest, Result } from '@/messaging/protocol'
+import { attachExternalIssue } from '@/qase/api'
+import { readQaseCredentials } from '@/qase/store'
 import { loadSettings } from '@/settings/store'
 import { getState, readScreenshot } from './store'
 
@@ -152,11 +154,14 @@ async function create(request: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Pro
   }
 
   const settings = await loadSettings()
-  const script = settings.jira.includePlaywrightScript
+  const includePlaywright = draft.includePlaywrightScript ?? settings.jira.includePlaywrightScript
+  const script = includePlaywright
     ? generatePlaywrightScript(state.snapshot, settings.playwright)
     : null
 
   const screenshot = draft.attachScreenshot ? await readScreenshot() : null
+
+  const qaseCode = state.qaseCaseCode ?? state.snapshot.qaseCaseCode ?? null
 
   const created = await createIssue(credentials, {
     projectKey: draft.projectKey,
@@ -169,8 +174,24 @@ async function create(request: JiraRequest & { type: 'JIRA_CREATE_ISSUE' }): Pro
       actual: draft.actual,
       expected: draft.expected,
       hasScreenshot: screenshot !== null,
+      qaseCaseCode: qaseCode,
     }),
   })
+
+  if (created.ok && qaseCode) {
+    try {
+      const qaseCreds = await readQaseCredentials()
+      if (qaseCreds) {
+        const idMatch = qaseCode.match(/(\d+)$/)
+        if (idMatch) {
+          const caseId = parseInt(idMatch[1], 10)
+          await attachExternalIssue(qaseCreds, caseId, created.data.key)
+        }
+      }
+    } catch {
+      // Non-blocking attachment
+    }
+  }
 
   if (!created.ok || !screenshot) {
     return created

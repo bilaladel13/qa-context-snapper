@@ -1,14 +1,24 @@
-import { describeStep, formatExpectedAssertion } from '@/generator/shared'
+import {
+  cleanAndDeduplicateInteractions,
+  describeStep,
+  formatExpectedAssertion,
+  formatQaseCaseUrl,
+} from '@/generator/shared'
 import type { ConsoleErrorEntry, ContextSnapshot } from '@/types'
 
 // Atlassian Document Format. Built straight from the snapshot rather than by
 // parsing the Markdown report, so there is no converter to drift out of sync.
+interface AdfMark {
+  type: string
+  attrs?: Record<string, unknown>
+}
+
 interface AdfNode {
   type: string
   attrs?: Record<string, unknown>
   content?: AdfNode[]
   text?: string
-  marks?: { type: string }[]
+  marks?: AdfMark[]
 }
 
 export interface AdfDocument {
@@ -88,7 +98,10 @@ function stepNodes(interactions: ContextSnapshot['interactions']): AdfNode[] {
     }
   }
 
-  for (const step of interactions) {
+  const deduplicated = cleanAndDeduplicateInteractions(interactions)
+  const actionSteps = deduplicated.filter((step) => step.type !== 'assertion')
+
+  for (const step of actionSteps) {
     if (step.type === 'marker') {
       flush()
       nodes.push(heading(3, describeStep(step)))
@@ -129,7 +142,12 @@ function formatDuration(startedAt: number, stoppedAt: number): string {
   return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`
 }
 
-export function suggestSummary(snapshot: ContextSnapshot): string {
+export function suggestSummary(
+  snapshot: ContextSnapshot,
+  qaseCaseCode?: string | null,
+): string {
+  const effectiveQaseCode = qaseCaseCode || snapshot.qaseCaseCode
+  const prefix = effectiveQaseCode ? `[${effectiveQaseCode}] ` : ''
   const page = snapshot.environment.pageTitle || snapshot.environment.pageUrl || 'Recorded session'
   const firstError = snapshot.consoleErrors[0]
   const firstFailed = snapshot.interactions.find(
@@ -139,10 +157,10 @@ export function suggestSummary(snapshot: ContextSnapshot): string {
   const summary = firstError
     ? `${page}: ${firstError.message}`
     : firstFailed
-      ? `${page}: ${firstFailed.assertion?.message || formatExpectedAssertion(firstFailed)}`
+      ? `${page}: ${firstFailed.customExpected || firstFailed.assertion?.message || formatExpectedAssertion(firstFailed)}`
       : page
 
-  return summary.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_LIMIT)
+  return `${prefix}${summary}`.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_LIMIT)
 }
 
 interface DescriptionOptions {
@@ -151,6 +169,7 @@ interface DescriptionOptions {
   actual?: string
   expected?: string
   hasScreenshot?: boolean
+  qaseCaseCode?: string | null
 }
 
 export function buildDescription(
@@ -159,19 +178,46 @@ export function buildDescription(
 ): AdfDocument {
   const { environment, interactions, consoleErrors } = snapshot
   const finalUrl = interactions[interactions.length - 1]?.url ?? environment.pageUrl
+  const associatedQaseCode = options.qaseCaseCode || snapshot.qaseCaseCode
+
+  const infoNodes: AdfNode[] = [
+    text(
+      `Captured with QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}.${
+        options.hasScreenshot
+          ? ' A screenshot of the page as the recording stopped is attached.'
+          : ''
+      }`,
+    ),
+  ]
+
+  if (associatedQaseCode) {
+    const projectCode = snapshot.qaseProjectCode || associatedQaseCode.split('-')[0] || 'SQA'
+    const caseId = snapshot.qaseCaseId || associatedQaseCode
+    const qaseUrl = formatQaseCaseUrl(projectCode, caseId, snapshot.qaseSuiteId)
+
+    infoNodes.push(text(' Associated Qase Test Case: '))
+    infoNodes.push({
+      type: 'text',
+      text: associatedQaseCode,
+      marks: [
+        {
+          type: 'link',
+          attrs: { href: qaseUrl },
+        },
+      ],
+    })
+    infoNodes.push(text('.'))
+  }
 
   const content: AdfNode[] = [
     {
       type: 'panel',
       attrs: { panelType: 'info' },
       content: [
-        paragraph(
-          `Captured with QA Context Snapper on ${new Date(snapshot.stoppedAt).toISOString()}.${
-            options.hasScreenshot
-              ? ' A screenshot of the page as the recording stopped is attached.'
-              : ''
-          }`,
-        ),
+        {
+          type: 'paragraph',
+          content: infoNodes,
+        },
       ],
     },
     // The reporter's own words come first. Everything below is machine captured

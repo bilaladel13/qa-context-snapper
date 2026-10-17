@@ -7,7 +7,15 @@ import type {
   LocatorScope,
   LocatorStrategy,
 } from '@/types'
-import { originOf, parseViewport, quote, relativizeUrl, resolveStrategy, trimEllipsis } from './shared'
+import {
+  cleanAndDeduplicateInteractions,
+  originOf,
+  parseViewport,
+  quote,
+  relativizeUrl,
+  resolveStrategy,
+  trimEllipsis,
+} from './shared'
 
 function leafExpression(
   strategy: LocatorStrategy,
@@ -277,7 +285,7 @@ export function generatePlaywrightScript(
 ): string {
   const options = resolvePlaywrightSettings(requested)
   const { environment, interactions, consoleErrors } = snapshot
-  const steps = dedupeNavigation(interactions)
+  const steps = dedupeNavigation(cleanAndDeduplicateInteractions(interactions))
   const startUrl = steps.find((step) => step.type === 'navigation')?.value ?? environment.pageUrl
   const q = (input: string) => quote(input, options.quoteStyle)
 
@@ -302,7 +310,11 @@ export function generatePlaywrightScript(
   }
 
   lines.push(`import { test, expect } from ${q('@playwright/test')};`, '')
-  lines.push(`test(${q(options.testTitle)}, async ({ page }) => {`)
+  const qasePrefix = snapshot.qaseCaseCode ? `[${snapshot.qaseCaseCode}] ` : ''
+  const testTitle = options.testTitle.startsWith('[') || !qasePrefix
+    ? options.testTitle
+    : `${qasePrefix}${options.testTitle}`
+  lines.push(`test(${q(testTitle)}, async ({ page }) => {`)
 
   if (options.includeConsoleAssertion) {
     lines.push(

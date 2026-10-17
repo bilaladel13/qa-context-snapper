@@ -6,6 +6,7 @@ import { Field } from '@/components/Field'
 import { Select } from '@/components/Select'
 import { Textarea } from '@/components/Textarea'
 import { TextInput } from '@/components/TextInput'
+import { Toggle } from '@/components/Toggle'
 import { CheckIcon, ExternalIcon, ResetIcon } from '@/components/icons'
 import { suggestSummary } from '@/jira/adf'
 import { formatActualAssertion, formatExpectedAssertion } from '@/generator/shared'
@@ -42,6 +43,7 @@ interface JiraViewProps {
   snapshot: ContextSnapshot | null
   screenshot: ScreenshotMeta | null
   screenshotError: string | null
+  qaseCaseCode?: string | null
   onOpenSettings: () => void
 }
 
@@ -51,6 +53,7 @@ export function JiraView({
   snapshot,
   screenshot,
   screenshotError,
+  qaseCaseCode,
   onOpenSettings,
 }: JiraViewProps) {
   const { projects, assignees, connection, busy, error, created } = jira
@@ -63,11 +66,12 @@ export function JiraView({
   const [issueTypeId, setIssueTypeId] = useState(selection.issueTypeId)
   const [assigneeAccountId, setAssigneeAccountId] = useState(UNASSIGNED)
   const [attachScreenshot, setAttachScreenshot] = useState(true)
+  const [includePlaywright, setIncludePlaywright] = useState(selection.includePlaywrightScript)
   const screenshotData = useScreenshot(screenshot !== null)
 
   useEffect(() => {
     if (snapshot) {
-      setSummary(suggestSummary(snapshot))
+      setSummary(suggestSummary(snapshot, qaseCaseCode))
 
       const failedAssertions = snapshot.interactions.filter(
         (step) => step.type === 'assertion' && step.assertion?.isViolation,
@@ -86,8 +90,8 @@ export function JiraView({
         const actualText = failedAssertions
           .map(
             (s) =>
-              `❌ ${formatActualAssertion(s)} (Expected: ${formatExpectedAssertion(s)})${
-                s.assertion?.message ? `\n   Reason: ${s.assertion.message}` : ''
+              `- ${formatActualAssertion(s)}${
+                s.assertion?.message ? ` (Reason: ${s.assertion.message})` : ''
               }`,
           )
           .join('\n')
@@ -103,7 +107,7 @@ export function JiraView({
         )
       }
     }
-  }, [snapshot])
+  }, [snapshot, qaseCaseCode])
 
   const project = useMemo(
     () => projects.find((entry) => entry.key === projectKey) ?? null,
@@ -158,6 +162,7 @@ export function JiraView({
       actual,
       expected,
       attachScreenshot: attachScreenshot && screenshot !== null,
+      includePlaywrightScript: includePlaywright,
     })
 
     if (success) {
@@ -226,6 +231,15 @@ export function JiraView({
           </p>
         ) : null}
 
+        {qaseCaseCode ? (
+          <div className="flex items-center justify-between rounded-lg border border-brand-teal/30 bg-brand-teal/10 px-3 py-2 text-xs text-ink">
+            <span className="text-ink-subtle">Linked Qase Case:</span>
+            <span className="rounded bg-brand-teal/20 px-2 py-0.5 font-mono font-semibold text-brand-teal">
+              {qaseCaseCode}
+            </span>
+          </div>
+        ) : null}
+
         <Group title="Report">
           <Field
             label="Summary"
@@ -271,7 +285,7 @@ export function JiraView({
           </Field>
         </Group>
 
-        <Group title="Visual context">
+        <Group title="Evidence & Attachments">
           <ScreenshotField
             meta={screenshot}
             error={screenshotError}
@@ -279,6 +293,17 @@ export function JiraView({
             attach={attachScreenshot}
             onChange={setAttachScreenshot}
           />
+          <div className="flex items-center justify-between py-2.5">
+            <label htmlFor="jira-playwright-toggle" className="text-xs font-medium text-ink cursor-pointer">
+              Include Playwright script in ticket
+            </label>
+            <Toggle
+              id="jira-playwright-toggle"
+              label="Include Playwright script in ticket"
+              checked={includePlaywright}
+              onChange={setIncludePlaywright}
+            />
+          </div>
         </Group>
 
         <Group title="Destination">

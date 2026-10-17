@@ -7,4 +7,7 @@ release
 .vite
 .env
 .env.*
+.env.local
+.env*.local
 !.env.example
+

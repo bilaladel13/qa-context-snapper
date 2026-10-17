@@ -12,6 +12,8 @@ import type {
   PopupQueryResponseMap,
   PopupRequest,
   PopupResponse,
+  QaseRequest,
+  QaseResponseMap,
   Result,
 } from './protocol'
 
@@ -62,6 +64,12 @@ export function reportToBackground<R extends ContentToBackground>(
 export function callJira<R extends JiraRequest>(
   request: R,
 ): Promise<Result<JiraResponseMap[R['type']]>> {
+  return send(() => chrome.runtime.sendMessage(request))
+}
+
+export function callQase<R extends QaseRequest>(
+  request: R,
+): Promise<Result<QaseResponseMap[R['type']]>> {
   return send(() => chrome.runtime.sendMessage(request))
 }
 

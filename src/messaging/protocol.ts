@@ -6,6 +6,14 @@ import type {
   JiraUser,
 } from '@/jira/types'
 import type {
+  QaseCase,
+  QaseConnection,
+  QaseProject,
+  QaseSuite,
+  QaseSyncDraft,
+  QaseSyncResult,
+} from '@/qase/types'
+import type {
   ConsoleErrorEntry,
   EnvironmentSnapshot,
   InteractionEvent,
@@ -26,10 +34,25 @@ export function fail<T = never>(error: string): Result<T> {
 
 export type PopupRequest =
   | { type: 'GET_STATE' }
-  | { type: 'START_RECORDING' }
+  | {
+      type: 'START_RECORDING'
+      qaseContext?: {
+        projectCode?: string | null
+        suiteId?: number | null
+        caseId?: number | null
+        caseTitle?: string | null
+      }
+    }
   | { type: 'STOP_RECORDING' }
   | { type: 'RESET_RECORDING' }
   | { type: 'DELETE_STEP'; stepId: string }
+  | {
+      type: 'UPDATE_STEP'
+      stepId: string
+      patch: { customAction?: string; customExpected?: string }
+    }
+  | { type: 'UPDATE_SESSION_TITLE'; title: string }
+  | { type: 'LOAD_DEMO_RESULT' }
 
 export type PopupResponse = Result<RecorderState>
 
@@ -108,6 +131,48 @@ export function isJiraRequest(value: unknown): value is JiraRequest {
   return typeof type === 'string' && JIRA_REQUEST_TYPES.has(type)
 }
 
+export type QaseRequest =
+  | { type: 'QASE_GET_CONNECTION' }
+  | { type: 'QASE_CONNECT'; projectCode: string; apiToken: string }
+  | { type: 'QASE_DISCONNECT' }
+  | { type: 'QASE_LIST_PROJECTS' }
+  | { type: 'QASE_LIST_CASES'; projectCode?: string }
+  | { type: 'QASE_LIST_SUITES'; projectCode?: string }
+  | { type: 'QASE_SYNC'; draft: QaseSyncDraft }
+  | { type: 'QASE_DELETE_CASE'; caseId: number; projectCode?: string }
+
+export interface QaseResponseMap {
+  QASE_GET_CONNECTION: { connection: QaseConnection | null }
+  QASE_CONNECT: { connection: QaseConnection; cases: QaseCase[]; suites: QaseSuite[] }
+  QASE_DISCONNECT: { disconnected: true }
+  QASE_LIST_PROJECTS: { projects: QaseProject[] }
+  QASE_LIST_CASES: { cases: QaseCase[] }
+  QASE_LIST_SUITES: { suites: QaseSuite[] }
+  QASE_SYNC: QaseSyncResult
+  QASE_DELETE_CASE: { id: number }
+}
+
+const QASE_REQUEST_TYPES = new Set([
+  'QASE_GET_CONNECTION',
+  'QASE_CONNECT',
+  'QASE_DISCONNECT',
+  'QASE_LIST_PROJECTS',
+  'QASE_LIST_CASES',
+  'QASE_LIST_SUITES',
+  'QASE_SYNC',
+  'QASE_DELETE_CASE',
+])
+
+export function isQaseRequest(value: unknown): value is QaseRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const { type } = value as { type?: unknown }
+
+  return typeof type === 'string' && QASE_REQUEST_TYPES.has(type)
+}
+
 export type ContentRequest =
   | { type: 'CONTENT_PING' }
   | { type: 'CONTENT_START_RECORDING'; sessionId: string }
@@ -166,6 +231,9 @@ const POPUP_REQUEST_TYPES = new Set([
   'STOP_RECORDING',
   'RESET_RECORDING',
   'DELETE_STEP',
+  'UPDATE_STEP',
+  'UPDATE_SESSION_TITLE',
+  'LOAD_DEMO_RESULT',
 ])
 
 const POPUP_QUERY_TYPES = new Set([

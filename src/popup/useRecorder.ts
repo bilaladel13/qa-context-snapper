@@ -8,10 +8,21 @@ export interface Recorder {
   state: RecorderState | null
   error: string | null
   pending: boolean
-  start: () => void
+  start: (qaseContext?: {
+    projectCode?: string
+    suiteId?: number | null
+    caseId?: number | null
+    caseTitle?: string | null
+  }) => void
   stop: () => void
   reset: () => void
   deleteStep: (stepId: string) => void
+  updateStep: (
+    stepId: string,
+    patch: { customAction?: string; customExpected?: string },
+  ) => void
+  updateSessionTitle: (title: string) => void
+  loadDemo: () => void
   focusTab: () => void
   startAssertion: () => void
   addStepMarker: () => void
@@ -104,10 +115,28 @@ export function useRecorder(): Recorder {
     state,
     error,
     pending,
-    start: useCallback(() => void dispatch({ type: 'START_RECORDING' }), [dispatch]),
+    start: useCallback(
+      (qaseContext?: {
+        projectCode?: string
+        suiteId?: number | null
+        caseId?: number | null
+        caseTitle?: string | null
+      }) => void dispatch({ type: 'START_RECORDING', qaseContext }),
+      [dispatch],
+    ),
     stop: useCallback(() => void dispatch({ type: 'STOP_RECORDING' }), [dispatch]),
     reset: useCallback(() => void dispatch({ type: 'RESET_RECORDING' }), [dispatch]),
     deleteStep: useCallback((stepId: string) => void dispatch({ type: 'DELETE_STEP', stepId }), [dispatch]),
+    updateStep: useCallback(
+      (stepId: string, patch: { customAction?: string; customExpected?: string }) =>
+        void dispatch({ type: 'UPDATE_STEP', stepId, patch }),
+      [dispatch],
+    ),
+    updateSessionTitle: useCallback(
+      (title: string) => void dispatch({ type: 'UPDATE_SESSION_TITLE', title }),
+      [dispatch],
+    ),
+    loadDemo: useCallback(() => void dispatch({ type: 'LOAD_DEMO_RESULT' }), [dispatch]),
     focusTab,
     startAssertion,
     addStepMarker,

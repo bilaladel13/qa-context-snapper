@@ -46,4 +46,5 @@ export interface JiraDraft {
   actual: string
   expected: string
   attachScreenshot: boolean
+  includePlaywrightScript?: boolean
 }

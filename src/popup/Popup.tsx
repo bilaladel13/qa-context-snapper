@@ -3,11 +3,13 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { Header } from '@/components/Header'
 import { IdleView } from '@/views/IdleView'
 import { JiraView } from '@/views/JiraView'
+import { QaseView } from '@/views/QaseView'
 import { RecordingView } from '@/views/RecordingView'
 import { ResultView } from '@/views/ResultView'
 import { SettingsView } from '@/views/SettingsView'
 import { useEnvironment } from './useEnvironment'
 import { useJira } from './useJira'
+import { useQase } from './useQase'
 import { useRecorder } from './useRecorder'
 import { useSettings } from './useSettings'
 import { SHORTCUTS_PAGE, useShortcut } from './useShortcut'
@@ -16,11 +18,12 @@ import { useTheme } from './useTheme'
 const TOGGLE_COMMAND = 'toggle-recording'
 const ASSERT_COMMAND = 'toggle-assertion-mode'
 
-type Route = 'main' | 'settings' | 'jira'
+type Route = 'main' | 'settings' | 'jira' | 'qase'
 
 const TITLES: Partial<Record<Route, string>> = {
   settings: 'Settings',
   jira: 'Create Jira Ticket',
+  qase: 'Sync to Qase',
 }
 
 export function Popup() {
@@ -31,6 +34,7 @@ export function Popup() {
   const recorder = useRecorder()
   const environment = useEnvironment()
   const jira = useJira()
+  const qase = useQase()
   const shortcut = useShortcut(TOGGLE_COMMAND)
   const assertShortcut = useShortcut(ASSERT_COMMAND)
 
@@ -73,7 +77,22 @@ export function Popup() {
           snapshot={state?.snapshot ?? null}
           screenshot={state?.screenshot ?? null}
           screenshotError={state?.screenshotError ?? null}
+          qaseCaseCode={state?.qaseCaseCode ?? null}
           onOpenSettings={() => setRoute('settings')}
+        />
+      ) : route === 'qase' ? (
+        <QaseView
+          qase={qase}
+          snapshot={state?.snapshot ?? null}
+          onUpdateStep={recorder.updateStep}
+          onDeleteStep={recorder.deleteStep}
+          onBack={() => setRoute('main')}
+          onCreateTicket={(caseCode) => {
+            if (state) {
+              state.qaseCaseCode = caseCode
+            }
+            setRoute('jira')
+          }}
         />
       ) : state === null ? (
         <main className="flex flex-1 items-center justify-center px-4 py-6">
@@ -96,14 +115,19 @@ export function Popup() {
           pending={pending}
           onReset={recorder.reset}
           onCreateTicket={() => setRoute('jira')}
+          onOpenQase={() => setRoute('qase')}
           onDeleteStep={recorder.deleteStep}
+          onUpdateStep={recorder.updateStep}
+          onUpdateSessionTitle={recorder.updateSessionTitle}
         />
       ) : (
         <IdleView
           environment={environment}
           pending={pending}
           shortcut={shortcut}
+          qase={qase}
           onStart={recorder.start}
+          onLoadDemo={recorder.loadDemo}
         />
       )}
     </div>

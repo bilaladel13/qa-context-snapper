@@ -271,7 +271,12 @@ function recordAssertion(target: ElementTarget | null, assertion: AssertionDetai
     return
   }
 
-  emit(makeEvent('assertion', target, { assertion }))
+  emit(
+    makeEvent('assertion', target, {
+      assertion,
+      ...(assertion.message ? { customExpected: assertion.message } : {}),
+    }),
+  )
 }
 
 function promptForStepMarker(): boolean {

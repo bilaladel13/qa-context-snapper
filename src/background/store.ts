@@ -32,6 +32,7 @@ export const INITIAL_STATE: RecorderState = {
   tabId: null,
   tabUrl: null,
   tabTitle: null,
+  sessionTitle: null,
   startedAt: null,
   stoppedAt: null,
   interactionCount: 0,
@@ -41,6 +42,11 @@ export const INITIAL_STATE: RecorderState = {
   screenshot: null,
   screenshotError: null,
   report: null,
+  qaseCaseCode: null,
+  qaseProjectCode: null,
+  qaseSuiteId: null,
+  qaseCaseId: null,
+  qaseCaseTitle: null,
 }
 
 // Every mutation is a read-modify-write against session storage. The service
@@ -272,3 +278,77 @@ export function removeStep(stepId: string): Promise<RecorderState> {
     return state
   })
 }
+
+export function updateStep(
+  stepId: string,
+  patch: { customAction?: string; customExpected?: string },
+): Promise<RecorderState> {
+  return withLock(async () => {
+    const buffer = await loadBuffer()
+    if (buffer) {
+      buffer.interactions = buffer.interactions.map((step) =>
+        step.id === stepId ? { ...step, ...patch } : step,
+      )
+      await chrome.storage.session.set({ [BUFFER_KEY]: buffer })
+    }
+
+    const state = await loadState()
+    if (state.snapshot) {
+      const interactions = state.snapshot.interactions.map((step) =>
+        step.id === stepId ? { ...step, ...patch } : step,
+      )
+      const snapshot: ContextSnapshot = {
+        ...state.snapshot,
+        interactions,
+      }
+      const settings = await loadSettings()
+      const report = generateReport(snapshot, settings)
+      const next: RecorderState = {
+        ...state,
+        snapshot,
+        report,
+        interactionCount: interactions.length,
+      }
+      await chrome.storage.session.set({ [STATE_KEY]: next })
+      broadcast(next)
+      return next
+    }
+
+    return state
+  })
+}
+
+export function updateSessionTitle(title: string): Promise<RecorderState> {
+  return withLock(async () => {
+    const state = await loadState()
+    const settings = await loadSettings()
+    const snapshot: ContextSnapshot | null = state.snapshot
+      ? {
+          ...state.snapshot,
+          sessionTitle: title,
+          environment: {
+            ...state.snapshot.environment,
+            pageTitle: title,
+          },
+        }
+      : null
+
+    const report = snapshot
+      ? generateReport(snapshot, {
+          ...settings,
+          playwright: { ...settings.playwright, testTitle: title },
+        })
+      : state.report
+
+    const next: RecorderState = {
+      ...state,
+      sessionTitle: title,
+      snapshot,
+      report,
+    }
+    await chrome.storage.session.set({ [STATE_KEY]: next })
+    broadcast(next)
+    return next
+  })
+}
+

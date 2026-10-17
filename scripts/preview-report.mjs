@@ -522,7 +522,7 @@ const silentBugSnapshot = {
 const bugReport = generateReport(silentBugSnapshot).markdown
 
 checks.push(
-  ['report highlights failed assertion as observed bug', bugReport.includes('❌ Failed Assertion (Observed Bug)')],
+  ['report highlights failed assertion as observed bug', bugReport.includes('Failed Assertion (Observed Bug)')],
   ['report contains expected and actual comparison', bugReport.includes('**Expected**:') && bugReport.includes('**Actual**:')],
 )
 

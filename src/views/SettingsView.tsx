@@ -238,6 +238,17 @@ export function SettingsView({ controller, jira, shortcut, onOpenShortcuts }: Se
               placeholder="data-testid, data-qa"
             />
           </Field>
+
+          <Field
+            label="Auto-merge consecutive steps"
+            hint="Merges clicking an input followed immediately by typing into a single step, and ignores redundant container clicks."
+          >
+            <Toggle
+              label="Auto-merge consecutive steps"
+              checked={settings.capture.autoMergeConsecutiveSteps}
+              onChange={(autoMergeConsecutiveSteps) => setCapture({ autoMergeConsecutiveSteps })}
+            />
+          </Field>
         </Group>
 
         <section>
